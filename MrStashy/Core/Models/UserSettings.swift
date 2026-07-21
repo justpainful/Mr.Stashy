@@ -31,6 +31,17 @@ struct UserSettings: Codable, Equatable, Sendable {
         reduceMotion = try values.decodeIfPresent(Bool.self, forKey: .reduceMotion) ?? legacyReduceMotion ?? false
     }
 
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(quality, forKey: .quality)
+        try values.encode(saveMode, forKey: .saveMode)
+        try values.encode(saveToPhotos, forKey: .saveToPhotos)
+        try values.encode(allowCellular, forKey: .allowCellular)
+        try values.encode(maxParallelDownloads, forKey: .maxParallelDownloads)
+        try values.encode(appearance, forKey: .appearance)
+        try values.encode(reduceMotion, forKey: .reduceMotion)
+    }
+
     static func load() -> UserSettings {
         guard let data = UserDefaults.standard.data(forKey: "user-settings"), let settings = try? JSONDecoder().decode(UserSettings.self, from: data) else { return .init() }
         return settings
