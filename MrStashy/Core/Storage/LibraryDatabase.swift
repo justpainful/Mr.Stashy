@@ -1,19 +1,25 @@
 import Foundation
 import SQLite3
 
+private final class SQLiteConnection: @unchecked Sendable {
+    var handle: OpaquePointer?
+
+    deinit {
+        if let handle { sqlite3_close(handle) }
+    }
+}
+
 /// Metadata-only SQLite index. Archive manifests and media remain in the file store so a
 /// post can always be reopened without depending on a database blob.
 actor LibraryDatabase {
-    private var connection: OpaquePointer?
+    private let connectionBox = SQLiteConnection()
 
-    deinit {
-        if let connection { sqlite3_close(connection) }
-    }
+    private var connection: OpaquePointer? { connectionBox.handle }
 
     func migrate(at databaseURL: URL) throws {
         if connection == nil {
             try FileManager.default.createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard sqlite3_open_v2(databaseURL.path, &connection, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            guard sqlite3_open_v2(databaseURL.path, &connectionBox.handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
                 throw LibraryDatabaseError.openFailed(message: errorMessage)
             }
             try execute("PRAGMA foreign_keys = ON;")

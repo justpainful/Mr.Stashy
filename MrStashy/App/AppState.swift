@@ -125,8 +125,9 @@ final class AppState {
     private func enqueue(post: ResolvedPost, selectedIDs: Set<UUID>, mode: QueueItem.SaveMode) {
         let item = QueueItem(post: post, selectedMediaIDs: selectedIDs, mode: mode)
         queueItems.insert(item, at: 0)
-        let task = Task { [weak self] in
-            await self?.performSave(item: item, mediaOnly: mode == .mediaOnly)
+        let task: Task<Void, Never> = Task { [weak self] in
+            guard let self else { return }
+            await self.performSave(item: item, mediaOnly: mode == .mediaOnly)
         }
         activeSaveTasks[item.id] = task
     }
