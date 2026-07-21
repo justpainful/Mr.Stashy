@@ -56,8 +56,11 @@ actor LibraryDatabase {
             sqlite3_bind_double(statement, 2, summary.savedAt.timeIntervalSinceReferenceDate)
             bind(summary.platform.rawValue, to: 3, statement: statement)
             bind(summary.author, to: 4, statement: statement)
-            data.withUnsafeBytes { bytes in
+            let result: Int32 = data.withUnsafeBytes { bytes in
                 sqlite3_bind_blob(statement, 5, bytes.baseAddress, Int32(data.count), sqliteTransient)
+            }
+            guard result == SQLITE_OK else {
+                throw LibraryDatabaseError.statementFailed(message: errorMessage)
             }
             try step(statement)
         }
@@ -125,7 +128,7 @@ actor LibraryDatabase {
         var error: UnsafeMutablePointer<CChar>?
         guard sqlite3_exec(connection, sql, nil, nil, &error) == SQLITE_OK else {
             defer { sqlite3_free(error) }
-            throw LibraryDatabaseError.statementFailed(message: error.map(String.init(cString:)) ?? errorMessage)
+            throw LibraryDatabaseError.statementFailed(message: error.map { String(cString: $0) } ?? errorMessage)
         }
     }
 
