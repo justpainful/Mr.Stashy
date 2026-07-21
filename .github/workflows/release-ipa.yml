@@ -1,0 +1,162 @@
+name: Release unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*-sideload"]
+
+permissions:
+  contents: write
+
+env:
+  SCHEME: MrStashy
+  XCODE_PATH: /Applications/Xcode_26.5.0.app/Contents/Developer
+  TUIST_XDG_CACHE_HOME: /tmp/tuist-cache
+  TUIST_XDG_STATE_HOME: /tmp/tuist-state
+
+jobs:
+  release:
+    name: Build, verify, and package sideload release
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+      - uses: jdx/mise-action@v2
+      - name: Bootstrap project
+        run: bash scripts/bootstrap.sh
+      - name: Validate genuine-alpha production assets
+        run: |
+          python3 -m pip install --requirement requirements-dev.txt
+          python3 scripts/verify_assets.py
+      - name: Run deterministic tests
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          RESULT_BUNDLE=Artifacts/MrStashyTests.xcresult bash scripts/test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+          RESULT_BUNDLE=Artifacts/MrStashyUITests.xcresult bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - name: Verify the iPhone 14 Pro Max baseline or closest available equivalent
+        run: |
+          device="$(bash scripts/boot_simulator.sh iphone-14-or-closest)"
+          RESULT_BUNDLE=Artifacts/MrStashyBaselineUITests.xcresult bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - name: Run release-blocking live platform contracts
+        env:
+          LIVE_PLATFORM_CONTRACTS: "1"
+          PLATFORM_CONTRACT_FIXTURE_TOKEN: ${{ secrets.PLATFORM_CONTRACT_FIXTURE_TOKEN }}
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          bash scripts/platform_contracts.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - name: Capture release screenshots
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          bash scripts/capture_screenshots.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+          ditto -c -k --sequesterRsrc --keepParent Artifacts/Screenshots Artifacts/MrStashy-Screenshots.zip
+      - name: Package unsigned sideload IPA and dSYM
+        run: bash scripts/package_ipa.sh "$SCHEME"
+      - name: Install optional signing material
+        if: ${{ secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        env:
+          P12_BASE64: ${{ secrets.IOS_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_SIGNING_P12_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          signing_dir="$RUNNER_TEMP/stashy-signing"
+          keychain="$RUNNER_TEMP/stashy-signing.keychain-db"
+          mkdir -p "$signing_dir" "$HOME/Library/MobileDevice/Provisioning Profiles"
+          printf '%s' "$P12_BASE64" | base64 -D > "$signing_dir/certificate.p12"
+          printf '%s' "$PROFILE_BASE64" | base64 -D > "$signing_dir/profile.mobileprovision"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$signing_dir/certificate.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          profile_uuid="$(security cms -D -i "$signing_dir/profile.mobileprovision" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)"
+          cp "$signing_dir/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+      - name: Package optional signed sideload IPA
+        if: ${{ secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/package_signed_ipa.sh "$SCHEME"
+      - name: Run final release guard
+        run: RELEASE_GUARD_SKIP_TESTS=1 bash scripts/release_guard.sh
+      - name: Build quality-report archive
+        if: always()
+        run: |
+          mkdir -p Artifacts/QualityReports
+          cp -f Artifacts/AssetValidationReport.json Artifacts/QualityReports/ 2>/dev/null || true
+          cp -f Artifacts/PlatformSupportReport.json Artifacts/QualityReports/ 2>/dev/null || true
+          cp -f Artifacts/PlatformSupport.md Artifacts/QualityReports/ 2>/dev/null || true
+          cp -f Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md Artifacts/QualityReports/ 2>/dev/null || true
+          ditto -c -k --sequesterRsrc --keepParent Artifacts/QualityReports Artifacts/MrStashy-QualityReports.zip
+      - name: Build xcresult archive
+        if: always()
+        run: |
+          mkdir -p Artifacts/Xcresults
+          for result in Artifacts/MrStashyTests.xcresult Artifacts/MrStashyUITests.xcresult Artifacts/MrStashyBaselineUITests.xcresult Artifacts/PlatformContractTests.xcresult; do
+            [ -e "$result" ] && cp -R "$result" Artifacts/Xcresults/
+          done
+          ditto -c -k --sequesterRsrc --keepParent Artifacts/Xcresults Artifacts/MrStashy-xcresult.zip
+      - name: Publish verified GitHub release
+        if: success() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          assets=(
+            Artifacts/MrStashy-unsigned.ipa
+            Artifacts/MrStashy-dSYM.zip
+            Artifacts/MrStashy-Screenshots.zip
+            Artifacts/MrStashy-QualityReports.zip
+            Artifacts/MrStashy-xcresult.zip
+            Artifacts/PlatformSupportReport.json
+            Artifacts/PlatformSupport.md
+          )
+          if [ -f Artifacts/MrStashy-signed.ipa ]; then assets+=(Artifacts/MrStashy-signed.ipa); fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --title "Stashy $tag" \
+              --notes "Unsigned IPA is provided for local re-signing and sideloading. See Docs/Sideloading.md. Platform support is limited to the attached live contract matrix."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-unsigned.ipa
+          path: Artifacts/MrStashy-unsigned.ipa
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-dSYM.zip
+          path: Artifacts/MrStashy-dSYM.zip
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        with:
+          name: MrStashy-signed.ipa
+          path: Artifacts/MrStashy-signed.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-Screenshots.zip
+          path: Artifacts/MrStashy-Screenshots.zip
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-QualityReports.zip
+          path: Artifacts/MrStashy-QualityReports.zip
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-xcresult.zip
+          path: Artifacts/MrStashy-xcresult.zip
+          if-no-files-found: warn

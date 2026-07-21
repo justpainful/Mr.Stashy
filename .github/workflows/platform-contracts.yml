@@ -1,0 +1,60 @@
+name: Live platform contracts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  SCHEME: MrStashy
+  XCODE_PATH: /Applications/Xcode_26.5.0.app/Contents/Developer
+  TUIST_XDG_CACHE_HOME: /tmp/tuist-cache
+  TUIST_XDG_STATE_HOME: /tmp/tuist-state
+
+jobs:
+  live-contracts:
+    name: Public resolver contracts
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - name: Run live contracts with redacted logs
+        env:
+          LIVE_PLATFORM_CONTRACTS: "1"
+          # Optional, source-platform-specific session material belongs in GitHub Secrets.
+          PLATFORM_CONTRACT_FIXTURE_TOKEN: ${{ secrets.PLATFORM_CONTRACT_FIXTURE_TOKEN }}
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          bash scripts/platform_contracts.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - name: Redact accidental secret-shaped values before upload
+        if: always()
+        run: |
+          mkdir -p Artifacts/RedactedLogs
+          for log in Artifacts/Logs/platform-contracts.log Artifacts/PlatformSupportReport.json; do
+            if [ -f "$log" ]; then
+              sed -E \
+                -e 's/(Authorization:)[[:space:]]*.*/\1 [REDACTED]/Ig' \
+                -e 's/(token|cookie|session)=([^&[:space:]]+)/\1=[REDACTED]/Ig' \
+                "$log" > "Artifacts/RedactedLogs/$(basename "$log")"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-contract-evidence
+          path: |
+            Artifacts/PlatformSupportReport.json
+            Artifacts/PlatformSupport.md
+            Artifacts/PlatformContractTests.xcresult
+            Artifacts/RedactedLogs
+          if-no-files-found: warn

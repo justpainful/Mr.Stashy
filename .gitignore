@@ -1,0 +1,23 @@
+.DS_Store
+.build/
+.swiftpm/
+.tuist/
+DerivedData/
+Artifacts/Build/
+Artifacts/DerivedData/
+Artifacts/Logs/
+Artifacts/QualityReports/
+Artifacts/Xcresults/
+Artifacts/*.xcresult
+Artifacts/Screenshots/*.zip
+Artifacts/Memgraphs/
+Artifacts/*.ipa
+Artifacts/*-dSYM.zip
+Artifacts/*-QualityReports.zip
+Artifacts/*-xcresult.zip
+*.ipa
+scripts/__pycache__/
+Goal.txt
+# Original icon explorations are retained locally; the production app icon lives in
+# Resources/Assets.xcassets and is the only icon asset tracked with the app.
+Stashy Icons/

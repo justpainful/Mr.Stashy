@@ -1,0 +1,173 @@
+{
+  "passed": true,
+  "assets": [
+    {
+      "path": "Resources/Assets.xcassets/Characters/bloom.imageset/bloom.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.5019,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/cloud.imageset/cloud.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.6097,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/geo.imageset/geo.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.5605,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/humanA.imageset/humanA.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.6459,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/humanB.imageset/humanB.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.537,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/orbit.imageset/orbit.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.43,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/round.imageset/round.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.6326,
+      "componentCount": 1
+    },
+    {
+      "path": "Resources/Assets.xcassets/Characters/sprout.imageset/sprout.png",
+      "dimensions": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "errors": [],
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "cornerAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "suspiciousWhiteEdgePixels": 0,
+      "mainComponentRatio": 1.0,
+      "mainComponentFill": 0.6314,
+      "componentCount": 1
+    }
+  ]
+}

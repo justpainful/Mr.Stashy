@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  SCHEME: MrStashy
+  XCODE_PATH: /Applications/Xcode_26.5.0.app/Contents/Developer
+  TUIST_XDG_CACHE_HOME: /tmp/tuist-cache
+  TUIST_XDG_STATE_HOME: /tmp/tuist-state
+
+jobs:
+  asset-validation:
+    name: Asset validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement requirements-dev.txt
+      - run: python scripts/verify_assets.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: asset-validation-report
+          path: Artifacts/AssetValidationReport.json
+          if-no-files-found: error
+
+  formatting:
+    name: Formatting and linting
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+      - run: bash scripts/lint.sh
+
+  project-generation:
+    name: Project generation and bootstrap
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+      - uses: jdx/mise-action@v2
+      - name: Verify pinned Tuist and generate project
+        run: |
+          test "$(tuist version)" = "$(cat .tuist-version)"
+          bash scripts/bootstrap.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: project-generation-logs
+          path: /tmp/tuist-state/logs
+          if-no-files-found: warn
+
+  unit-and-integration-tests:
+    name: Unit and deterministic integration tests
+    needs: [asset-validation, project-generation]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - name: Run deterministic tests
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          RESULT_BUNDLE=Artifacts/MrStashyTests.xcresult XCODEBUILD_LOG=Artifacts/Logs/tests.log \
+            bash scripts/test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-and-integration-results
+          path: |
+            Artifacts/MrStashyTests.xcresult
+            Artifacts/Logs/tests.log
+          if-no-files-found: warn
+
+  simulator-build:
+    name: Simulator build
+    needs: [asset-validation, project-generation]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - name: Build the app for an available Pro Max simulator
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          bash scripts/build.sh "$SCHEME" "platform=iOS Simulator,id=$device" 2>&1 | tee Artifacts/Logs/simulator-build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulator-build-log
+          path: Artifacts/Logs/simulator-build.log
+          if-no-files-found: warn
+
+  ui-tests:
+    name: UI tests
+    needs: [unit-and-integration-tests, simulator-build]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - name: Run UI tests
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          RESULT_BUNDLE=Artifacts/MrStashyUITests.xcresult XCODEBUILD_LOG=Artifacts/Logs/ui-tests.log \
+            bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-results
+          path: |
+            Artifacts/MrStashyUITests.xcresult
+            Artifacts/Logs/ui-tests.log
+          if-no-files-found: warn
+
+  release-build:
+    name: Unsigned Release build
+    needs: [unit-and-integration-tests, ui-tests]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - run: bash scripts/package_ipa.sh "$SCHEME"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unsigned-release-build
+          path: |
+            Artifacts/MrStashy-unsigned.ipa
+            Artifacts/MrStashy-dSYM.zip
+            Artifacts/BuildMetadata.json
+          if-no-files-found: warn
+
+  release-guard:
+    name: Release guard (live contracts intentionally separate)
+    needs:
+      [asset-validation, unit-and-integration-tests, ui-tests, release-build]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+      - uses: jdx/mise-action@v2
+      - run: bash scripts/bootstrap.sh
+      - name: Capture release-gate screenshots
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          bash scripts/capture_screenshots.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      - name: Package IPA for complete local guard
+        run: bash scripts/package_ipa.sh "$SCHEME"
+      - name: Run release guard without live platform calls
+        run: RELEASE_GUARD_SKIP_LIVE_CONTRACTS=1 RELEASE_GUARD_SKIP_TESTS=1 bash scripts/release_guard.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-guard-evidence
+          path: |
+            Artifacts
+            /tmp/tuist-state/logs
+          if-no-files-found: warn
