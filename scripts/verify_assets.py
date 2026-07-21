@@ -38,7 +38,11 @@ def inspect(path: Path) -> dict:
     if image.mode != "RGBA":
         result["errors"].append("mode is not RGBA")
         return result
-    alpha = list(image.getchannel("A").get_flattened_data())
+    # Pillow 10 keeps getdata(); newer development builds provide the flattened alias.
+    # Support both to keep this verifier reproducible on the pinned CI version.
+    alpha_channel = image.getchannel("A")
+    alpha_values = getattr(alpha_channel, "get_flattened_data", alpha_channel.getdata)()
+    alpha = list(alpha_values)
     result["minAlpha"] = min(alpha)
     result["maxAlpha"] = max(alpha)
     if result["minAlpha"] != 0:
