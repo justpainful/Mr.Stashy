@@ -16,6 +16,9 @@ let appInfoPlist: [String: Plist.Value] = [
 let project = Project(
     name: "MrStashy",
     organizationName: "Vaultline",
+    packages: [
+        .remote(url: "https://github.com/weichsel/ZIPFoundation.git", requirement: .upToNextMajor(from: "0.9.0"))
+    ],
     settings: .settings(
         base: [
             "SWIFT_VERSION": "6.0",
@@ -37,7 +40,7 @@ let project = Project(
             sources: ["MrStashy/**", "Shared/**"],
             resources: ["Resources/**"],
             entitlements: "MrStashy/MrStashy.entitlements",
-            dependencies: [.target(name: "StashyShareExtension", embed: .embedAppExtension), .sdk(name: "libsqlite3.tbd", type: .library), .external(name: "ZIPFoundation")]
+            dependencies: [.target(name: "StashyShareExtension"), .sdk(name: "libsqlite3.tbd", type: .library), .external(name: "ZIPFoundation")]
         ),
         .target(
             name: "StashyShareExtension",
@@ -89,9 +92,6 @@ let project = Project(
             resources: ["PlatformContractTests/Fixtures/**"],
             dependencies: [.target(name: "MrStashy")]
         )
-    ],
-    packages: [
-        .remote(url: "https://github.com/weichsel/ZIPFoundation.git", requirement: .upToNextMajor(from: "0.9.0"))
     ],
     schemes: [
         .scheme(

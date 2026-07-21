@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CHARACTER_ROOT = ROOT / "Resources" / "Assets.xcassets" / "Characters"
 REPORT = ROOT / "Artifacts" / "AssetValidationReport.json"
 
+def flattened_values(image: Image.Image):
+    return getattr(image, "get_flattened_data", image.getdata)()
+
 def edge_pixels(image: Image.Image):
     width, height = image.size
     pixels = image.load()
@@ -27,7 +30,7 @@ def has_checkerboard(image: Image.Image) -> bool:
     if width < 8 or height < 8:
         return False
     sample = image.convert("RGB").resize((32, 32))
-    values = list(sample.get_flattened_data())
+    values = list(flattened_values(sample))
     light = sum(1 for r, g, b in values if r > 175 and g > 175 and b > 175)
     gray = sum(1 for r, g, b in values if abs(r - g) < 8 and abs(g - b) < 8)
     return light > 600 and gray > 700
@@ -41,7 +44,7 @@ def inspect(path: Path) -> dict:
     # Pillow 10 keeps getdata(); newer development builds provide the flattened alias.
     # Support both to keep this verifier reproducible on the pinned CI version.
     alpha_channel = image.getchannel("A")
-    alpha_values = getattr(alpha_channel, "get_flattened_data", alpha_channel.getdata)()
+    alpha_values = flattened_values(alpha_channel)
     alpha = list(alpha_values)
     result["minAlpha"] = min(alpha)
     result["maxAlpha"] = max(alpha)
