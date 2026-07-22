@@ -10,7 +10,17 @@ final class AppState {
     var libraryPosts: [ArchivedPostSummary] = []
     var settings = UserSettings.load()
     var onboardingComplete = UserDefaults.standard.bool(forKey: "onboarding.complete")
-    var pendingLink: URL?
+    var pendingLinks: [URL] = []
+    var pendingLink: URL? {
+        get { pendingLinks.first }
+        set {
+            if let newValue {
+                if !pendingLinks.contains(newValue) { pendingLinks.insert(newValue, at: 0) }
+            } else if !pendingLinks.isEmpty {
+                pendingLinks.removeFirst()
+            }
+        }
+    }
     var lastError: UserVisibleError?
 
     private var activeSaveTasks: [UUID: Task<Void, Never>] = [:]
@@ -26,8 +36,8 @@ final class AppState {
         await configureScreenshotFixturesIfNeeded()
 #endif
         let links = PendingShareStore.consumePendingURLs()
-        if let first = links.first {
-            pendingLink = first
+        if !links.isEmpty {
+            pendingLinks.append(contentsOf: links)
             selectedTab = .catch
         }
     }
@@ -135,7 +145,7 @@ final class AppState {
     private func performSave(item: QueueItem, mediaOnly: Bool) async {
         do {
             updateQueueItem(id: item.id, stage: item.selectedMediaIDs.isEmpty ? .creatingArchive : .downloading)
-            try await archiveStore.save(post: item.post, selectedMediaIDs: item.selectedMediaIDs, mediaOnly: mediaOnly) { [weak self] progress in
+            try await archiveStore.save(post: item.post, selectedMediaIDs: item.selectedMediaIDs, mediaOnly: mediaOnly, allowCellular: settings.allowCellular) { [weak self] progress in
                 await self?.apply(progress, toQueueItem: item.id)
             }
             try Task.checkCancellation()

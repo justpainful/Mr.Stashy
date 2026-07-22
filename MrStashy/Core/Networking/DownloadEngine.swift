@@ -13,9 +13,20 @@ actor DownloadEngine {
     func download(
         request: URLRequest,
         destination: URL,
+        allowCellular: Bool = true,
         onProgress: @escaping @Sendable (DownloadByteProgress) async -> Void
     ) async throws -> HTTPURLResponse {
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        var mutableRequest = request
+        mutableRequest.allowsCellularAccess = allowCellular
+        let session: URLSession
+        if !allowCellular {
+            let config = URLSessionConfiguration.default
+            config.allowsCellularAccess = false
+            session = URLSession(configuration: config)
+        } else {
+            session = URLSession.shared
+        }
+        let (bytes, response) = try await session.bytes(for: mutableRequest)
         guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
             throw ResolverError.networkFailure
         }

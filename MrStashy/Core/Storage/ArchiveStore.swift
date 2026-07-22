@@ -77,6 +77,7 @@ actor ArchiveStore {
         post: ResolvedPost,
         selectedMediaIDs: Set<UUID>,
         mediaOnly: Bool,
+        allowCellular: Bool = true,
         onProgress: @escaping @Sendable (ArchiveSaveProgress) async -> Void = { _ in }
     ) async throws {
         try Task.checkCancellation()
@@ -92,7 +93,7 @@ actor ArchiveStore {
             guard let variant = item.highestVariant else { throw ResolverError.qualityUnavailable }
             let destinationName = "\(item.orderIndex)-\(item.id.uuidString).\(variant.url.pathExtension.isEmpty ? "bin" : variant.url.pathExtension)"
             let destination = temporary.appendingPathComponent("media").appendingPathComponent(destinationName)
-            let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination) { byteProgress in
+            let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
                 await onProgress(.init(mediaIndex: selectedIndex, mediaCount: selectedMedia.count, completedBytes: byteProgress.completedBytes, expectedBytes: byteProgress.expectedBytes))
             }
             records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: variant.url, localFilename: destinationName, checksumSHA256: checksum, variant: variant))
@@ -224,12 +225,13 @@ actor ArchiveStore {
         variant: MediaVariant,
         type: MediaType,
         destination: URL,
+        allowCellular: Bool,
         onProgress: @escaping @Sendable (DownloadByteProgress) async -> Void
     ) async throws -> String {
         var request = URLRequest(url: variant.url)
         request.timeoutInterval = 60
         for (key, value) in variant.headers { request.setValue(value, forHTTPHeaderField: key) }
-        let http = try await downloadEngine.download(request: request, destination: destination, onProgress: onProgress)
+        let http = try await downloadEngine.download(request: request, destination: destination, allowCellular: allowCellular, onProgress: onProgress)
         let contentType = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
         guard !contentType.contains("text/html"), !contentType.contains("application/json") else { throw ResolverError.verificationFailure }
         try MediaIntegrityVerifier.validate(file: destination, type: type)
