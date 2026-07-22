@@ -9,6 +9,7 @@ enum StashyTheme {
     static let aqua = Color(red: 0.52, green: 0.80, blue: 0.79)
     static let green = Color(red: 0.18, green: 0.42, blue: 0.30)
     static let darkSurface = Color(red: 0.12, green: 0.13, blue: 0.13)
+    static let surface = Color(uiColor: .secondarySystemBackground)
 }
 
 struct StashyBackground: View {

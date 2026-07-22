@@ -19,3 +19,5 @@ set -o pipefail
 xcodebuild -project MrStashy.xcodeproj -scheme "$scheme" -configuration Debug \
   -destination "$destination" -only-testing:MrStashyUITests \
   -resultBundlePath "$result_bundle" test 2>&1 | tee "$log_path"
+
+bash scripts/collect_screenshots.sh "$screenshots_dir" "$result_bundle"

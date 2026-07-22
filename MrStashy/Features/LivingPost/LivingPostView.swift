@@ -117,7 +117,8 @@ private struct LocalMediaCard: View {
             }
         }
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .background(StashyTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(StashyTheme.charcoal.opacity(0.12), lineWidth: 1))
         .task(id: record.localFilename) {
             guard let filename = record.localFilename else { return }
             localURL = await appState.archiveStore.localMediaURL(archiveID: archiveID, filename: filename)

@@ -17,7 +17,7 @@ actor PendingQueueStore {
 
     private var fileURL: URL {
         if let overrideFileURL { return overrideFileURL }
-        fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Stashy/Queue/pending.json", isDirectory: false)
     }
 

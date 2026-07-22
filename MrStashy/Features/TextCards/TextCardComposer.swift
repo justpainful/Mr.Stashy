@@ -150,9 +150,8 @@ struct TextCardCanvas: View {
             }
             .foregroundStyle(colors.foreground)
             .padding(34)
-                .frame(width: 86)
-                .padding(18)
-                .accessibilityHidden(true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .accessibilityHidden(true)
         }
         .accessibilityLabel(Text(String(localized: "textCard.preview")))
     }
