@@ -31,6 +31,10 @@ Paste/share URL → canonicalize → resolver → selectable ResolvedPost
 
 The post folder is durable. If the database cannot open or must be rebuilt, library summaries are reconstructed from `summary.json` files. See `StorageFormat.md`.
 
+Pending queue entries persist only the source URL, selected source-order indexes, save mode, and request identifier. On relaunch the app re-resolves the public source before downloading, so expiring media URLs and request headers are never written to the queue file. A cancellation-aware permit pool enforces the user's parallel-download setting.
+
+Downloaded media is verified before it enters the archive. Files with the same SHA-256 digest reuse an existing on-volume file through a hard link when the filesystem supports it; a failed link safely falls back to the independently verified file.
+
 ## Visual reserve
 
 The current product direction intentionally excludes character and illustration assets from runtime UI. The design system uses semantic color, typography, spacing, native controls, and functional SF Symbols without reserving empty artwork containers.

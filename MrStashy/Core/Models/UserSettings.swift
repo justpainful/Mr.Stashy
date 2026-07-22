@@ -1,7 +1,10 @@
 import Foundation
 
 struct UserSettings: Codable, Equatable, Sendable {
-    enum Quality: String, Codable, CaseIterable { case original, askEveryTime, dataSaver }
+    enum Quality: String, Codable, CaseIterable {
+        case original, askEveryTime, dataSaver
+        static let selectableCases: [Quality] = [.original, .dataSaver]
+    }
     enum SaveMode: String, Codable, CaseIterable { case fullPost, mediaOnly, askEveryTime }
     enum Appearance: String, Codable, CaseIterable { case system, light, dark }
 
@@ -21,7 +24,8 @@ struct UserSettings: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        quality = try values.decodeIfPresent(Quality.self, forKey: .quality) ?? .original
+        let decodedQuality = try values.decodeIfPresent(Quality.self, forKey: .quality) ?? .original
+        quality = decodedQuality == .askEveryTime ? .original : decodedQuality
         saveMode = try values.decodeIfPresent(SaveMode.self, forKey: .saveMode) ?? .askEveryTime
         saveToPhotos = try values.decodeIfPresent(Bool.self, forKey: .saveToPhotos) ?? false
         allowCellular = try values.decodeIfPresent(Bool.self, forKey: .allowCellular) ?? true

@@ -50,10 +50,9 @@ jobs:
         run: |
           device="$(bash scripts/boot_simulator.sh)"
           bash scripts/platform_contracts.sh "$SCHEME" "platform=iOS Simulator,id=$device"
-      - name: Capture release screenshots
+      - name: Package screenshots captured by UI tests
         run: |
-          device="$(bash scripts/boot_simulator.sh)"
-          bash scripts/capture_screenshots.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+          test -d Artifacts/Screenshots
           ditto -c -k --sequesterRsrc --keepParent Artifacts/Screenshots Artifacts/MrStashy-Screenshots.zip
       - name: Package unsigned sideload IPA and dSYM
         run: bash scripts/package_ipa.sh "$SCHEME"

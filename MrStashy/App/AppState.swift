@@ -25,6 +25,8 @@ final class AppState {
 
     private var activeSaveTasks: [UUID: Task<Void, Never>] = [:]
     private var transferSamples: [UUID: QueueTransferSample] = [:]
+    private let pendingQueueStore = PendingQueueStore()
+    private let downloadPermits = DownloadPermitPool()
 
     let archiveStore = ArchiveStore()
     let resolverRegistry = ResolverRegistry()
@@ -40,6 +42,7 @@ final class AppState {
             pendingLinks.append(contentsOf: links)
             selectedTab = .catch
         }
+        await restorePendingQueue()
     }
 
     func handleOpenURL(_ url: URL) {
@@ -115,7 +118,15 @@ final class AppState {
         }
         catchState = .resolving(.checkingLink)
         do {
+            _ = try URLCanonicalizer.canonicalize(url)
+            catchState = .resolving(.resolvingPlatform)
+            await Task.yield()
+            catchState = .resolving(.findingContent)
             let post = try await resolverRegistry.resolve(url)
+            catchState = .resolving(.inspectingVariants)
+            guard !post.media.isEmpty || !post.text.isEmpty else { throw ResolverError.mediaMissing }
+            catchState = .resolving(.verifyingQuality)
+            guard post.media.allSatisfy({ $0.highestVariant != nil }) else { throw ResolverError.qualityUnavailable }
             catchState = .ready(post)
         } catch let error as ResolverError {
             catchState = .failed(error)
@@ -134,7 +145,6 @@ final class AppState {
 
     func cancelQueueItem(id: UUID) {
         activeSaveTasks[id]?.cancel()
-        activeSaveTasks[id] = nil
         transferSamples[id] = nil
         updateQueueItem(id: id, stage: .cancelled)
     }
@@ -142,7 +152,9 @@ final class AppState {
     func retryQueueItem(_ item: QueueItem) {
         switch item.stage {
         case .failed, .cancelled:
-            enqueue(post: item.post, selectedIDs: item.selectedMediaIDs, mode: item.mode)
+            guard activeSaveTasks[item.id] == nil else { return }
+            updateQueueItem(id: item.id, stage: .waiting, progress: 0)
+            startSave(item)
         default:
             return
         }
@@ -153,11 +165,38 @@ final class AppState {
     }
 
     private func enqueue(post: ResolvedPost, selectedIDs: Set<UUID>, mode: QueueItem.SaveMode) {
-        let item = QueueItem(post: post, selectedMediaIDs: selectedIDs, mode: mode)
+        var item = QueueItem(post: post, selectedMediaIDs: selectedIDs, mode: mode, stage: .waiting)
+        item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
         queueItems.insert(item, at: 0)
+        startSave(item)
+    }
+
+    private func startSave(_ item: QueueItem) {
         let task: Task<Void, Never> = Task { [weak self] in
             guard let self else { return }
-            await self.performSave(item: item, mediaOnly: mode == .mediaOnly)
+            let request = PendingQueueRequest(
+                id: item.id,
+                sourceURL: item.post.originalURL,
+                selectedOrderIndices: Set(item.post.media.filter { item.selectedMediaIDs.contains($0.id) }.map(\.orderIndex)),
+                mode: item.mode
+            )
+            do {
+                try await pendingQueueStore.upsert(request)
+            } catch {
+                updateQueueItem(id: item.id, stage: .failed(error.localizedDescription))
+                activeSaveTasks[item.id] = nil
+                return
+            }
+            do {
+                try await downloadPermits.acquire(limit: settings.maxParallelDownloads)
+            } catch {
+                updateQueueItem(id: item.id, stage: .cancelled)
+                try? await pendingQueueStore.remove(id: item.id)
+                activeSaveTasks[item.id] = nil
+                return
+            }
+            await self.performSave(item: item, mediaOnly: item.mode == .mediaOnly)
+            await downloadPermits.release()
         }
         activeSaveTasks[item.id] = task
     }
@@ -165,7 +204,13 @@ final class AppState {
     private func performSave(item: QueueItem, mediaOnly: Bool) async {
         do {
             updateQueueItem(id: item.id, stage: item.selectedMediaIDs.isEmpty ? .creatingArchive : .downloading)
-            try await archiveStore.save(post: item.post, selectedMediaIDs: item.selectedMediaIDs, mediaOnly: mediaOnly, allowCellular: settings.allowCellular) { [weak self] progress in
+            try await archiveStore.save(
+                post: item.post,
+                selectedMediaIDs: item.selectedMediaIDs,
+                mediaOnly: mediaOnly,
+                allowCellular: settings.allowCellular,
+                quality: settings.quality
+            ) { [weak self] progress in
                 await self?.apply(progress, toQueueItem: item.id)
             }
             try Task.checkCancellation()
@@ -177,13 +222,31 @@ final class AppState {
             updateQueueItem(id: item.id, stage: .completed, progress: 1)
             libraryPosts = await archiveStore.loadSummaries()
             if !mediaOnly { selectedTab = .library }
+            try? await pendingQueueStore.remove(id: item.id)
         } catch is CancellationError {
             updateQueueItem(id: item.id, stage: .cancelled)
+            try? await pendingQueueStore.remove(id: item.id)
         } catch {
             updateQueueItem(id: item.id, stage: .failed(error.localizedDescription))
         }
         activeSaveTasks[item.id] = nil
         transferSamples[item.id] = nil
+    }
+
+    private func restorePendingQueue() async {
+        let requests = await pendingQueueStore.load()
+        for request in requests where activeSaveTasks[request.id] == nil {
+            do {
+                let post = try await resolverRegistry.resolve(request.sourceURL)
+                let selectedIDs = Set(post.media.filter { request.selectedOrderIndices.contains($0.orderIndex) }.map(\.id))
+                var item = QueueItem(id: request.id, post: post, selectedMediaIDs: selectedIDs, mode: request.mode, stage: .waiting)
+                item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
+                queueItems.append(item)
+                startSave(item)
+            } catch {
+                lastError = UserVisibleError(message: error.localizedDescription)
+            }
+        }
     }
 
     func completeOnboarding() {
@@ -218,11 +281,13 @@ final class AppState {
         sample.lastUpdated = now
         transferSamples[id] = sample
         queueItems[index].stage = .downloading
-        queueItems[index].bytesDownloaded = update.completedBytes
-        queueItems[index].totalBytes = update.expectedBytes
+        queueItems[index].bytesDownloaded = overallBytes
+        if queueItems[index].totalBytes == nil, update.mediaCount == 1 {
+            queueItems[index].totalBytes = update.expectedBytes
+        }
         queueItems[index].bytesPerSecond = sample.bytesPerSecond
-        if let expected = update.expectedBytes, sample.bytesPerSecond > 0 {
-            queueItems[index].estimatedTimeRemaining = max(0, Double(expected - update.completedBytes) / sample.bytesPerSecond)
+        if let expected = queueItems[index].totalBytes, sample.bytesPerSecond > 0 {
+            queueItems[index].estimatedTimeRemaining = max(0, Double(expected - overallBytes) / sample.bytesPerSecond)
         } else {
             queueItems[index].estimatedTimeRemaining = nil
         }
@@ -241,6 +306,13 @@ final class AppState {
             try await PhotoLibrarySaver.save(url: url, type: record.type)
         }
     }
+
+    private func estimatedTotalBytes(post: ResolvedPost, selectedIDs: Set<UUID>) -> Int64? {
+        let selected = post.media.filter { selectedIDs.contains($0.id) }
+        let estimates = selected.compactMap { $0.highestVariant?.estimatedBytes }
+        guard estimates.count == selected.count else { return nil }
+        return estimates.reduce(0, +)
+    }
 }
 
 private struct QueueTransferSample {
@@ -250,6 +322,45 @@ private struct QueueTransferSample {
     var overallBytes: Int64 = 0
     var bytesPerSecond: Double = 0
     var lastUpdated = Date.now
+}
+
+private actor DownloadPermitPool {
+    private var active = 0
+    private struct Waiter {
+        var id: UUID
+        var continuation: CheckedContinuation<Void, Error>
+    }
+    private var waiters: [Waiter] = []
+
+    func acquire(limit: Int) async throws {
+        try Task.checkCancellation()
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if active < max(1, limit) {
+                    active += 1
+                    continuation.resume()
+                } else {
+                    waiters.append(Waiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task { await self.cancel(waiterID) }
+        }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            active = max(0, active - 1)
+        } else {
+            waiters.removeFirst().continuation.resume()
+        }
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+        waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+    }
 }
 
 

@@ -4,6 +4,8 @@ struct LibraryView: View {
     @Environment(AppState.self) private var appState
     @State private var mode: LibraryMode = .posts
     @State private var query = ""
+    @State private var selectedPlatform: Platform?
+    @State private var selectedMediaType: MediaType?
     @State private var entries: [ArchivedPostSummary] = []
     @State private var mediaEntries: [ArchivedMediaSummary] = []
     @State private var archivePendingDeletion: ArchivedPostSummary?
@@ -20,6 +22,7 @@ struct LibraryView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 20)
                 searchField
+                filters
                 content
             }
         }
@@ -54,8 +57,33 @@ struct LibraryView: View {
             .accessibilityIdentifier("library.search")
     }
 
+    private var filters: some View {
+        HStack(spacing: 12) {
+            Picker(String(localized: "library.filter.platform"), selection: $selectedPlatform) {
+                Text(String(localized: "library.filter.allPlatforms")).tag(Platform?.none)
+                ForEach(availablePlatforms) { platform in
+                    Text(L10n.value(platform.titleKey)).tag(Optional(platform))
+                }
+            }
+            .pickerStyle(.menu)
+
+            if mode == .media {
+                Picker(String(localized: "library.filter.mediaType"), selection: $selectedMediaType) {
+                    Text(String(localized: "library.filter.allMedia")).tag(MediaType?.none)
+                    ForEach(MediaType.allCases) { type in
+                        Label(L10n.value("media.\(type.rawValue)"), systemImage: type.systemImage)
+                            .tag(Optional(type))
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
+
     @ViewBuilder private var content: some View {
-        if (mode == .posts && entries.isEmpty) || (mode == .media && mediaEntries.isEmpty) {
+        if (mode == .posts && filteredEntries.isEmpty) || (mode == .media && filteredMediaEntries.isEmpty) {
             ContentUnavailableView {
                 Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
             } description: {
@@ -64,12 +92,12 @@ struct LibraryView: View {
         } else {
             List {
                 if mode == .posts {
-                    ForEach(entries) { item in
+                    ForEach(filteredEntries) { item in
                         NavigationLink { LivingPostView(archiveID: item.id) } label: { PostRow(summary: item) }
                             .swipeActions { deleteAction(item) }
                     }
                 } else {
-                    ForEach(mediaEntries) { item in
+                    ForEach(filteredMediaEntries) { item in
                         NavigationLink { LivingPostView(archiveID: item.archiveID) } label: { MediaRow(item: item) }
                             .swipeActions { deleteAction(ArchivedPostSummary(id: item.archiveID, platform: item.platform, author: item.author, text: "", mediaCount: 1, savedAt: item.savedAt, localFolderName: item.archiveID.uuidString)) }
                     }
@@ -92,6 +120,23 @@ struct LibraryView: View {
         Button(role: .destructive) { archivePendingDeletion = archive } label: {
             Label(String(localized: "action.delete"), systemImage: "trash")
         }
+    }
+
+    private var filteredEntries: [ArchivedPostSummary] {
+        guard let selectedPlatform else { return entries }
+        return entries.filter { $0.platform == selectedPlatform }
+    }
+
+    private var filteredMediaEntries: [ArchivedMediaSummary] {
+        mediaEntries.filter { item in
+            (selectedPlatform == nil || item.platform == selectedPlatform) &&
+                (selectedMediaType == nil || item.type == selectedMediaType)
+        }
+    }
+
+    private var availablePlatforms: [Platform] {
+        let values = mode == .posts ? entries.map(\.platform) : mediaEntries.map(\.platform)
+        return Array(Set(values)).sorted { L10n.value($0.titleKey) < L10n.value($1.titleKey) }
     }
 
     private func delete(_ archive: ArchivedPostSummary) async {

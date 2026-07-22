@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var showDiagnostics = false
     @State private var showResetConfirmation = false
     @State private var showStashImporter = false
+    @State private var showDeleteLibraryConfirmation = false
+    @State private var storageBytes: Int64 = 0
 
     var body: some View {
         ZStack {
@@ -15,7 +17,7 @@ struct SettingsView: View {
                     FeatureHeader(titleKey: "settings.title", subtitleKey: "settings.subtitle")
                 }
                 Section(String(localized: "settings.downloads")) {
-                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.allCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.selectableCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
                     Picker(String(localized: "settings.saveMode"), selection: settingBinding(\.saveMode)) { ForEach(UserSettings.SaveMode.allCases, id: \.self) { Text(L10n.value("settings.saveMode.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.photos"), isOn: settingBinding(\.saveToPhotos))
                     Toggle(String(localized: "settings.cellular"), isOn: settingBinding(\.allowCellular))
@@ -31,17 +33,32 @@ struct SettingsView: View {
                     Button(String(localized: "settings.resetOnboarding"), role: .destructive) { showResetConfirmation = true }
                 }
                 Section(String(localized: "settings.library")) {
+                    LabeledContent(String(localized: "settings.storageUsed")) {
+                        Text(ByteCountFormatter.string(fromByteCount: storageBytes, countStyle: .file))
+                    }
                     Button { showStashImporter = true } label: {
                         Label(String(localized: "settings.importStash"), systemImage: "square.and.arrow.down")
+                    }
+                    Button(role: .destructive) { showDeleteLibraryConfirmation = true } label: {
+                        Label(String(localized: "settings.deleteLibrary"), systemImage: "trash")
                     }
                 }
             }
             .scrollContentBackground(.hidden)
         }
         .navigationTitle(String(localized: "tab.settings"))
+        .task { storageBytes = await appState.archiveStore.storageUsageBytes() }
         .sheet(isPresented: $showDiagnostics) { PlatformDiagnosticsSheet() }
         .confirmationDialog(String(localized: "settings.resetOnboarding"), isPresented: $showResetConfirmation) {
             Button(String(localized: "action.reset"), role: .destructive) { appState.onboardingComplete = false; UserDefaults.standard.set(false, forKey: "onboarding.complete") }
+        }
+        .confirmationDialog(String(localized: "settings.deleteLibrary.title"), isPresented: $showDeleteLibraryConfirmation) {
+            Button(String(localized: "settings.deleteLibrary.confirm"), role: .destructive) {
+                Task { await deleteLibrary() }
+            }
+            Button(String(localized: "action.cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "settings.deleteLibrary.message"))
         }
         .fileImporter(isPresented: $showStashImporter, allowedContentTypes: [UTType(filenameExtension: "stash") ?? .data]) { result in
             guard case .success(let url) = result else { return }
@@ -59,6 +76,17 @@ struct SettingsView: View {
         do {
             _ = try await appState.archiveStore.importStash(from: url)
             appState.libraryPosts = await appState.archiveStore.loadSummaries()
+            storageBytes = await appState.archiveStore.storageUsageBytes()
+        } catch {
+            appState.lastError = UserVisibleError(message: error.localizedDescription)
+        }
+    }
+
+    private func deleteLibrary() async {
+        do {
+            try await appState.archiveStore.deleteAllArchives()
+            appState.libraryPosts = []
+            storageBytes = await appState.archiveStore.storageUsageBytes()
         } catch {
             appState.lastError = UserVisibleError(message: error.localizedDescription)
         }

@@ -139,7 +139,7 @@ struct UserVisibleError: Identifiable, Equatable {
 }
 
 struct QueueItem: Identifiable, Equatable {
-    enum SaveMode: String { case fullPost, mediaOnly }
+    enum SaveMode: String, Codable, Sendable { case fullPost, mediaOnly }
     enum Stage: Equatable {
         case resolving, analyzing, downloading, waiting, paused, merging, verifying, creatingArchive, savingToPhotos, completed, cancelled, failed(String)
         var titleKey: String {

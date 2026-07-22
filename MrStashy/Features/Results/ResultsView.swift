@@ -17,6 +17,10 @@ struct ResultsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     authorBlock
+                    Link(destination: post.canonicalURL) {
+                        Label(post.canonicalURL.host ?? post.canonicalURL.absoluteString, systemImage: "link")
+                            .font(.caption)
+                    }
                     if !post.text.isEmpty { Text(post.text).textSelection(.enabled).font(.body) }
                     if let quote = post.quotedPost { QuotedPostView(quote: quote) }
                     mediaList
@@ -31,7 +35,21 @@ struct ResultsView: View {
 
     private var authorBlock: some View {
         HStack(spacing: 12) {
-            Image(systemName: "person.crop.circle.fill").font(.system(size: 42)).foregroundStyle(StashyTheme.lavender)
+            Group {
+                if let avatarURL = post.author.avatarURL {
+                    AsyncImage(url: avatarURL) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        ProgressView()
+                    }
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .foregroundStyle(StashyTheme.lavender)
+                }
+            }
+            .frame(width: 42, height: 42)
+            .clipShape(.circle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName).font(.headline)
                 if let username = post.author.username { Text("@\(username)").font(.subheadline).foregroundStyle(.secondary) }
@@ -101,8 +119,17 @@ private struct MediaSelectionRow: View {
         .accessibilityLabel(Text(String(localized: "media.selection")))
     }
     private var metadata: String {
-        let dimensions = [media.width, media.height].compactMap { $0 }.count == 2 ? "\(media.width ?? 0) × \(media.height ?? 0)" : String(localized: "media.unknownDimensions")
-        return dimensions
+        var values = [[media.width, media.height].compactMap { $0 }.count == 2 ? "\(media.width ?? 0) × \(media.height ?? 0)" : String(localized: "media.unknownDimensions")]
+        if let duration = media.duration {
+            values.append(Duration.seconds(duration).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
+        }
+        if let variant = media.highestVariant {
+            if let codec = variant.codec, !codec.isEmpty { values.append(codec.uppercased()) }
+            if let container = variant.container, !container.isEmpty { values.append(container.uppercased()) }
+            if let bytes = variant.estimatedBytes { values.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
+            values.append(L10n.value(variant.cleanliness.titleKey))
+        }
+        return values.joined(separator: " · ")
     }
 }
 

@@ -80,6 +80,10 @@
 "library.delete.title" = "حذف المنشور المحفوظ؟";
 "library.delete.message" = "سيُحذف الأرشيف المحلي والوسائط التي نُزّلت منه نهائيًا من هذا الجهاز.";
 "library.delete.confirm" = "حذف المنشور";
+"library.filter.platform" = "المنصة";
+"library.filter.allPlatforms" = "كل المنصات";
+"library.filter.mediaType" = "نوع الوسائط";
+"library.filter.allMedia" = "كل الوسائط";
 
 "livingPost.title" = "المنشور المحفوظ";
 "livingPost.loading" = "جارٍ فتح الأرشيف…";
@@ -180,3 +184,8 @@
 "resolver.error.networkFailure" = "تعذر الوصول إلى الرابط.";
 "resolver.error.invalidResponse" = "أعاد المصدر استجابة غير متوقعة.";
 "resolver.error.verificationFailure" = "الملف الذي تم تنزيله لا يطابق نوع الوسائط المتوقع.";
+"settings.storageUsed" = "المساحة المستخدمة";
+"settings.deleteLibrary" = "حذف المكتبة المحلية";
+"settings.deleteLibrary.title" = "حذف جميع الأرشيفات المحلية؟";
+"settings.deleteLibrary.confirm" = "حذف كل الأرشيفات";
+"settings.deleteLibrary.message" = "سيؤدي هذا إلى حذف جميع أرشيفات ستاشي والوسائط المنزلة من هذا الجهاز نهائيًا. لن تتأثر العناصر التي حفظتها في الصور.";

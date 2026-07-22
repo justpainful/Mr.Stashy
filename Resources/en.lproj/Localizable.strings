@@ -80,6 +80,10 @@
 "library.delete.title" = "Delete saved post?";
 "library.delete.message" = "The local archive and its downloaded media will be permanently removed from this device.";
 "library.delete.confirm" = "Delete post";
+"library.filter.platform" = "Platform";
+"library.filter.allPlatforms" = "All platforms";
+"library.filter.mediaType" = "Media type";
+"library.filter.allMedia" = "All media";
 
 "livingPost.title" = "Living Post";
 "livingPost.loading" = "Opening archive…";
@@ -180,3 +184,8 @@
 "resolver.error.networkFailure" = "The link could not be reached.";
 "resolver.error.invalidResponse" = "The source returned an unexpected response.";
 "resolver.error.verificationFailure" = "The downloaded file did not match the expected media type.";
+"settings.storageUsed" = "Storage used";
+"settings.deleteLibrary" = "Delete local library";
+"settings.deleteLibrary.title" = "Delete every local archive?";
+"settings.deleteLibrary.confirm" = "Delete all archives";
+"settings.deleteLibrary.message" = "This permanently removes every Stashy archive and downloaded media from this device. Photos you saved separately are not affected.";

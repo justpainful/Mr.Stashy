@@ -78,6 +78,7 @@ actor ArchiveStore {
         selectedMediaIDs: Set<UUID>,
         mediaOnly: Bool,
         allowCellular: Bool = true,
+        quality: UserSettings.Quality = .original,
         onProgress: @escaping @Sendable (ArchiveSaveProgress) async -> Void = { _ in }
     ) async throws {
         try Task.checkCancellation()
@@ -90,12 +91,13 @@ actor ArchiveStore {
         var records: [ArchivedMediaRecord] = []
         for (selectedIndex, item) in selectedMedia.enumerated() {
             try Task.checkCancellation()
-            guard let variant = item.highestVariant else { throw ResolverError.qualityUnavailable }
+            guard let variant = selectedVariant(for: item, quality: quality) else { throw ResolverError.qualityUnavailable }
             let destinationName = "\(item.orderIndex)-\(item.id.uuidString).\(variant.url.pathExtension.isEmpty ? "bin" : variant.url.pathExtension)"
             let destination = temporary.appendingPathComponent("media").appendingPathComponent(destinationName)
             let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
                 await onProgress(.init(mediaIndex: selectedIndex, mediaCount: selectedMedia.count, completedBytes: byteProgress.completedBytes, expectedBytes: byteProgress.expectedBytes))
             }
+            deduplicateFile(at: destination, checksum: checksum)
             let archivedVariant = variant.safeArchiveCopy
             records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: checksum, variant: archivedVariant))
             let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
@@ -118,6 +120,29 @@ actor ArchiveStore {
         guard directory.standardizedFileURL.path.hasPrefix(postsRoot.standardizedFileURL.path) else { throw ResolverError.verificationFailure }
         if fileManager.fileExists(atPath: directory.path) { try fileManager.removeItem(at: directory) }
         try await database.remove(archiveID: id)
+    }
+
+    func deleteAllArchives() async throws {
+        for summary in fileSummaries() {
+            try await deleteArchive(id: summary.id)
+        }
+    }
+
+    func storageUsageBytes() -> Int64 {
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  let size = values.fileSize
+            else { continue }
+            total += Int64(size)
+        }
+        return total
     }
 
     func saveTextCard(pngData: Data, sourcePost: ResolvedPost) async throws -> ArchivedPostSummary {
@@ -207,6 +232,7 @@ actor ArchiveStore {
             guard let expected = media.checksumSHA256, !expected.isEmpty else { throw StashPackageError.checksumMismatch }
             guard try SHA256.fileDigest(mediaURL) == expected else { throw StashPackageError.checksumMismatch }
             try MediaIntegrityVerifier.validate(file: mediaURL, type: media.type)
+            deduplicateFile(at: mediaURL, checksum: expected)
         }
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
         let finalDirectory = postsRoot.appendingPathComponent(manifest.archiveID.uuidString, isDirectory: true)
@@ -224,6 +250,56 @@ actor ArchiveStore {
 
     private func rebuildIndexIfNeeded() async throws {
         for summary in fileSummaries() { try await database.upsert(summary) }
+    }
+
+    func selectedVariant(for media: ResolvedMedia, quality: UserSettings.Quality) -> MediaVariant? {
+        switch quality {
+        case .original, .askEveryTime:
+            return media.highestVariant
+        case .dataSaver:
+            return media.variants.min { lhs, rhs in
+                let lhsBytes = lhs.estimatedBytes ?? Int64.max
+                let rhsBytes = rhs.estimatedBytes ?? Int64.max
+                if lhsBytes != rhsBytes { return lhsBytes < rhsBytes }
+                let lhsPixels = pixelCount(lhs)
+                let rhsPixels = pixelCount(rhs)
+                return lhsPixels < rhsPixels
+            }
+        }
+    }
+
+    private func pixelCount(_ variant: MediaVariant) -> Int64 {
+        guard let width = variant.width, let height = variant.height else { return .max }
+        return Int64(width) * Int64(height)
+    }
+
+    private func deduplicateFile(at candidate: URL, checksum: String) {
+        guard let existing = existingMediaURL(checksum: checksum), existing.standardizedFileURL != candidate.standardizedFileURL else { return }
+        let backup = candidate.deletingLastPathComponent().appendingPathComponent(".dedup-\(UUID().uuidString)")
+        do {
+            try fileManager.moveItem(at: candidate, to: backup)
+            do {
+                try fileManager.linkItem(at: existing, to: candidate)
+                try fileManager.removeItem(at: backup)
+            } catch {
+                try? fileManager.moveItem(at: backup, to: candidate)
+            }
+        } catch {
+            return
+        }
+    }
+
+    private func existingMediaURL(checksum: String) -> URL? {
+        for summary in fileSummaries() {
+            guard let manifest = try? loadManifest(id: summary.id) else { continue }
+            for record in manifest.orderedMedia where record.checksumSHA256 == checksum {
+                guard let filename = record.localFilename,
+                      let url = localMediaURL(archiveID: summary.id, filename: filename)
+                else { continue }
+                return url
+            }
+        }
+        return nil
     }
 
     private func downloadAndVerify(
