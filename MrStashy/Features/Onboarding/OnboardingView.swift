@@ -30,10 +30,10 @@ struct OnboardingView: View {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
                         VStack(spacing: 24) {
                             IllustrationSlot(placement: .onboarding, height: 252)
-                            Text(String(localized: page.0))
+                            Text(L10n.value(page.0))
                                 .font(.system(.title, design: .rounded, weight: .bold))
                                 .multilineTextAlignment(.center)
-                            Text(String(localized: page.1))
+                            Text(L10n.value(page.1))
                                 .font(.body)
                                 .foregroundStyle(colorScheme == .dark ? StashyTheme.cream.opacity(0.76) : StashyTheme.charcoal.opacity(0.76))
                                 .multilineTextAlignment(.center)

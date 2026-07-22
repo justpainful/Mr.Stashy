@@ -26,12 +26,12 @@ struct TextCardComposer: View {
                     .clipShape(RoundedRectangle(cornerRadius: 28))
 
                     Picker(String(localized: "textCard.template"), selection: $style) {
-                        ForEach(TextCardStyle.allCases) { style in Text(String(localized: style.titleKey)).tag(style) }
+                        ForEach(TextCardStyle.allCases) { style in Text(L10n.value(style.titleKey)).tag(style) }
                     }
                     .pickerStyle(.segmented)
 
                     Picker(String(localized: "textCard.appearance"), selection: $appearance) {
-                        ForEach(TextCardAppearance.allCases) { appearance in Text(String(localized: appearance.titleKey)).tag(appearance) }
+                        ForEach(TextCardAppearance.allCases) { appearance in Text(L10n.value(appearance.titleKey)).tag(appearance) }
                     }
                     .pickerStyle(.segmented)
 

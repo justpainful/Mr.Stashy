@@ -106,7 +106,7 @@ private struct MediaSelectionRow: View {
     }
 }
 
-private struct QuotedPostView: View {
+struct QuotedPostView: View {
     let quote: QuotedPost
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

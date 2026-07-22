@@ -57,7 +57,7 @@ private struct QueueRow: View {
                         Label(L10n.format("queue.speed", ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file)), systemImage: "speedometer")
                     }
                     if let remaining = item.estimatedTimeRemaining {
-                        Label(L10n.format("queue.eta", remaining.formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))), systemImage: "clock")
+                        Label(L10n.format("queue.eta", Duration.seconds(remaining).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))), systemImage: "clock")
                     }
                 }
                 .font(.caption2)
