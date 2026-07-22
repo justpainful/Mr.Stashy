@@ -3,7 +3,10 @@ import XCTest
 @MainActor
 final class ScreenshotFlows: XCTestCase {
     private var screenshotsDirectory: URL {
-        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        if let envDir = ProcessInfo.processInfo.environment["SCREENSHOTS_DIR"], !envDir.isEmpty {
+            return URL(fileURLWithPath: envDir, isDirectory: true)
+        }
+        return URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("StashyScreenshots", isDirectory: true)
     }
 
