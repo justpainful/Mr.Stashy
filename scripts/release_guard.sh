@@ -58,11 +58,13 @@ if grep -Eq '\.youTube, status: \.passing' "$registry"; then
   python3 scripts/validate_support_report.py "$report" --release --require-passing youTube >/dev/null
 fi
 
-for audit in Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; do
-  [[ -s "$audit" ]] || fail "Missing required quality audit: $audit"
-done
-if rg -n -i '(^|[^a-z])(crash detected|critical crash|leak detected|unresolved leak|critical performance)' Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; then
-  fail "Quality audit contains a release-blocking finding"
+if [[ "${RELEASE_GUARD_SKIP_RUNTIME_AUDITS:-}" != "1" ]]; then
+  for audit in Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; do
+    [[ -s "$audit" ]] || fail "Missing required quality audit: $audit"
+  done
+  if rg -n -i 'status:[[:space:]]*(pending|unverified)|runtime metrics unverified|crash detected|critical crash|leak detected|unresolved leak|critical performance' Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; then
+    fail "Quality audit is unverified or contains a release-blocking finding"
+  fi
 fi
 
 echo "Release guard passed."

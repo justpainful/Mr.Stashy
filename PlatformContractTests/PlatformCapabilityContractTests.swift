@@ -9,7 +9,7 @@ struct PlatformCapabilityContractTests {
         #expect(Set(matrix.map(\.platform)).count == matrix.count)
     }
 
-    @Test func onlyVerifiedDirectMediaIsAdvertisedAsShipped() {
+    @Test func onlyContractVerifiedPlatformsAreAdvertisedAsShipped() {
         let shipped = PlatformCapabilityRegistry.shipped.map(\.platform)
         #expect(shipped == [.directMedia])
         #expect(PlatformCapabilityRegistry.all.first(where: { $0.platform == .discord })?.status == .blocked)

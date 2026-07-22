@@ -10,7 +10,7 @@ The iOS 26 design system uses native SwiftUI Liquid Glass APIs rather than mater
 | Result-ready row | `.glassEffect(... .interactive())` | Yes | Indicates the row opens detected results |
 | Status pills | `.glassEffect` on capsule | No | Compact status context; the pill itself is not a control |
 
-Glass is applied after layout/padding and related controls are grouped in `GlassEffectContainer`. Content, archive rows, illustration reserves, and large reading surfaces remain flat/graphic.
+Glass is applied after layout/padding and related controls are grouped in `GlassEffectContainer`. Content, archive rows, status symbols, and large reading surfaces remain flat and legible.
 
 ## Prohibited implementation
 

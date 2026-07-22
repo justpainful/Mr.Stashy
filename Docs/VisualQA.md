@@ -11,7 +11,7 @@ This file must be completed from final simulator screenshots, not from static so
 | Appearance | Light and warm charcoal dark | Pending final run |
 | Text size | Standard and large accessibility size | Pending final run |
 | Screens | All 14 required screenshot flows | Pending final run |
-| Illustration treatment | Neutral reserves have adequate hierarchy and do not claim final character integration | Pending final run |
+| Artwork treatment | Character and illustration assets are intentionally not used per the current product direction | Pending final run |
 
 The screenshot harness requires these final paths: `Artifacts/Screenshots/onboarding.png`, `catch-empty.png`, `results-mixed-media.png`, `queue.png`, `library-posts.png`, `library-media.png`, `living-post.png`, `text-card-composer.png`, `settings.png`, `discord-disabled.png`, `ar-catch.png`, `ar-library.png`, `dark-catch.png`, and `dark-library.png`.
 

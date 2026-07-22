@@ -61,7 +61,6 @@ struct LibraryView: View {
             } description: {
                 Text(String(localized: "library.empty.body"))
             }
-            .overlay(alignment: .bottom) { IllustrationSlot(placement: .emptyState, height: 108).frame(width: 158).offset(y: 92) }
         } else {
             List {
                 if mode == .posts {

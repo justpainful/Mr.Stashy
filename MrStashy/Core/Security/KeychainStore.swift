@@ -15,10 +15,13 @@ enum KeychainStore {
     private static let resolverService = "com.tryvaultline.mrstashy.resolvers"
 
     static func saveDiscordBotToken(_ token: String) throws {
-        guard token.hasPrefix("Bot ") || token.split(separator: ".").count == 3 else { throw ResolverError.authenticationRequired }
+        let secret = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard secret.hasPrefix("Bot "),
+              secret.dropFirst(4).split(separator: ".").count == 3
+        else { throw ResolverError.authenticationRequired }
         let service = "com.tryvaultline.mrstashy.discord"
         let account = "bot-token"
-        let data = Data(token.utf8)
+        let data = Data(secret.utf8)
         SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account] as CFDictionary)
         let status = SecItemAdd([
             kSecClass: kSecClassGenericPassword,

@@ -65,6 +65,21 @@ struct MediaVariant: Codable, Hashable, Sendable, Identifiable {
     var estimatedBytes: Int64?
     var qualityLabel: String
     var cleanliness: SourceCleanliness
+
+    var safeArchiveCopy: MediaVariant {
+        var copy = self
+        copy.headers = headers.filter { key, _ in
+            let normalized = key.lowercased()
+            return normalized != "authorization" && normalized != "cookie" && normalized != "set-cookie" &&
+                !normalized.contains("token") && !normalized.contains("api-key")
+        }
+        if var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.query = nil
+            components.fragment = nil
+            copy.url = components.url ?? url
+        }
+        return copy
+    }
 }
 
 struct ResolvedMedia: Codable, Hashable, Sendable, Identifiable {

@@ -33,4 +33,4 @@ The post folder is durable. If the database cannot open or must be rebuilt, libr
 
 ## Visual reserve
 
-The current design system provides neutral `IllustrationSlot` reserves where product illustrations can be introduced without changing screen hierarchy or accessibility. This document does not claim that final character art is integrated; production visual integration requires separate visual QA evidence.
+The current product direction intentionally excludes character and illustration assets from runtime UI. The design system uses semantic color, typography, spacing, native controls, and functional SF Symbols without reserving empty artwork containers.

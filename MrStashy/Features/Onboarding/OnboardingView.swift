@@ -5,11 +5,11 @@ struct OnboardingView: View {
     let onComplete: () -> Void
     @State private var step = 0
 
-    private let pages: [(String, String)] = [
-        ("onboarding.paste.title", "onboarding.paste.body"),
-        ("onboarding.find.title", "onboarding.find.body"),
-        ("onboarding.choose.title", "onboarding.choose.body"),
-        ("onboarding.local.title", "onboarding.local.body")
+    private let pages: [(String, String, String)] = [
+        ("onboarding.paste.title", "onboarding.paste.body", "link.badge.plus"),
+        ("onboarding.find.title", "onboarding.find.body", "sparkle.magnifyingglass"),
+        ("onboarding.choose.title", "onboarding.choose.body", "checklist"),
+        ("onboarding.local.title", "onboarding.local.body", "externaldrive.fill.badge.checkmark")
     ]
 
     var body: some View {
@@ -29,7 +29,11 @@ struct OnboardingView: View {
                 TabView(selection: $step) {
                     ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
                         VStack(spacing: 24) {
-                            IllustrationSlot(placement: .onboarding, height: 252)
+                            Image(systemName: page.2)
+                                .font(.system(size: 82, weight: .medium))
+                                .foregroundStyle(StashyTheme.lavender)
+                                .frame(height: 180)
+                                .accessibilityHidden(true)
                             Text(L10n.value(page.0))
                                 .font(.system(.title, design: .rounded, weight: .bold))
                                 .multilineTextAlignment(.center)

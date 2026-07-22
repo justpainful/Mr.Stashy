@@ -10,7 +10,6 @@ struct QueueView: View {
                 ContentUnavailableView {
                     Label(String(localized: "queue.empty.title"), systemImage: "arrow.down.circle")
                 } description: { Text(String(localized: "queue.empty.body")) }
-                .overlay(alignment: .bottom) { IllustrationSlot(placement: .emptyState, height: 110).frame(width: 160).offset(y: 92) }
             } else {
                 List(appState.queueItems) { item in
                     QueueRow(item: item)

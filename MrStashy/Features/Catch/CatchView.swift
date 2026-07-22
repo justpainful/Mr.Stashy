@@ -10,7 +10,7 @@ struct CatchView: View {
             StashyBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    IllustratedHeader(titleKey: "catch.title", subtitleKey: "catch.subtitle")
+                    FeatureHeader(titleKey: "catch.title", subtitleKey: "catch.subtitle")
                     captureForm
                     stateSection
                     recentCatches
@@ -105,7 +105,11 @@ private struct ResultReadyRow: View {
     let post: ResolvedPost
     var body: some View {
         HStack(spacing: 12) {
-            IllustrationSlot(placement: .results, height: 48).frame(width: 66)
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 34))
+                .foregroundStyle(StashyTheme.green)
+                .frame(width: 66, height: 48)
+                .accessibilityHidden(true)
             VStack(alignment: .leading) {
                 Text(String(localized: "catch.ready.title")).font(.headline)
                 Text(L10n.format("catch.ready.count", Int64(post.media.count)))

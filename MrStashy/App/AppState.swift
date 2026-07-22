@@ -42,6 +42,26 @@ final class AppState {
         }
     }
 
+    func handleOpenURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "stashy" else {
+            appendPendingLinks([url])
+            return
+        }
+        var incoming = PendingShareStore.consumePendingURLs()
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            incoming.append(contentsOf: components.queryItems?.filter { $0.name == "url" }.compactMap { item in
+                item.value.flatMap(URL.init(string:))
+            } ?? [])
+        }
+        appendPendingLinks(incoming)
+    }
+
+    private func appendPendingLinks(_ links: [URL]) {
+        for link in links where !pendingLinks.contains(link) { pendingLinks.append(link) }
+        guard !links.isEmpty else { return }
+        selectedTab = .catch
+    }
+
 #if DEBUG
     /// Debug-only local data used by the screenshot UI test. It keeps visual review fully
     /// offline and never enters a Release archive or a user's persisted library.

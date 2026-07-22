@@ -64,7 +64,7 @@ Discord functionality, when implemented, accepts only a user-supplied **Discord 
 
 - This README makes no claim that the required social-platform resolvers have passed live contracts.
 - Final simulator, crash, memory, performance, accessibility, and visual-QA evidence is required before a release can be accepted.
-- Character artwork is deliberately not asserted as production-integrated here. The current UI may use neutral illustration reserves while the visual system is finalized.
+- Character and illustration assets are intentionally excluded from runtime UI by the current product direction. Functional SF Symbols and native SwiftUI hierarchy provide the visual cues.
 
 ## Contributing and privacy
 

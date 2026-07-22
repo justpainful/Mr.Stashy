@@ -13,6 +13,7 @@ env:
   XCODE_PATH: /Applications/Xcode_26.5.0.app/Contents/Developer
   TUIST_XDG_CACHE_HOME: /tmp/tuist-cache
   TUIST_XDG_STATE_HOME: /tmp/tuist-state
+  HAS_SIGNING_MATERIAL: ${{ secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
 
 jobs:
   release:
@@ -57,7 +58,7 @@ jobs:
       - name: Package unsigned sideload IPA and dSYM
         run: bash scripts/package_ipa.sh "$SCHEME"
       - name: Install optional signing material
-        if: ${{ secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        if: env.HAS_SIGNING_MATERIAL == 'true'
         env:
           P12_BASE64: ${{ secrets.IOS_SIGNING_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_SIGNING_P12_PASSWORD }}
@@ -78,7 +79,7 @@ jobs:
           profile_uuid="$(security cms -D -i "$signing_dir/profile.mobileprovision" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)"
           cp "$signing_dir/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
       - name: Package optional signed sideload IPA
-        if: ${{ secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        if: env.HAS_SIGNING_MATERIAL == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/package_signed_ipa.sh "$SCHEME"
@@ -137,7 +138,7 @@ jobs:
           path: Artifacts/MrStashy-dSYM.zip
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && secrets.IOS_SIGNING_P12_BASE64 != '' && secrets.IOS_SIGNING_P12_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+        if: always() && env.HAS_SIGNING_MATERIAL == 'true'
         with:
           name: MrStashy-signed.ipa
           path: Artifacts/MrStashy-signed.ipa

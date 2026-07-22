@@ -8,7 +8,12 @@ final class ShareViewController: SLComposeServiceViewController {
         Task { @MainActor in
             let urls = await extractURLs()
             PendingShareStore.enqueue(urls)
-            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            guard let extensionContext,
+                  let deepLink = URL(string: "stashy://catch")
+            else { return }
+            extensionContext.open(deepLink) { _ in
+                extensionContext.completeRequest(returningItems: [], completionHandler: nil)
+            }
         }
     }
 

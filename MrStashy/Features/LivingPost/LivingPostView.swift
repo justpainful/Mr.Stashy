@@ -27,7 +27,11 @@ struct LivingPostView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    IllustrationSlot(placement: .detail, height: 64).frame(width: 64)
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(StashyTheme.lavender)
+                        .frame(width: 64, height: 64)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading) {
                         Text(manifest.author.displayName).font(.headline)
                         Text(L10n.value(manifest.platform.titleKey)).font(.caption).foregroundStyle(.secondary)

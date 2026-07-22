@@ -150,7 +150,6 @@ struct TextCardCanvas: View {
             }
             .foregroundStyle(colors.foreground)
             .padding(34)
-            IllustrationSlot(placement: .textCard, height: 72)
                 .frame(width: 86)
                 .padding(18)
                 .accessibilityHidden(true)

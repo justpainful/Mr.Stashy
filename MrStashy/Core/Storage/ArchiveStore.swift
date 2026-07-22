@@ -96,7 +96,8 @@ actor ArchiveStore {
             let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
                 await onProgress(.init(mediaIndex: selectedIndex, mediaCount: selectedMedia.count, completedBytes: byteProgress.completedBytes, expectedBytes: byteProgress.expectedBytes))
             }
-            records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: variant.url, localFilename: destinationName, checksumSHA256: checksum, variant: variant))
+            let archivedVariant = variant.safeArchiveCopy
+            records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: checksum, variant: archivedVariant))
             let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
             await onProgress(.init(mediaIndex: selectedIndex + 1, mediaCount: selectedMedia.count, completedBytes: completedBytes, expectedBytes: completedBytes))
         }
@@ -125,7 +126,7 @@ actor ArchiveStore {
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
 
         let archiveID = UUID()
-        let temporary = root.appendingPathComponent(".tmp-text-(UUID().uuidString)", isDirectory: true)
+        let temporary = root.appendingPathComponent(".tmp-text-\(UUID().uuidString)", isDirectory: true)
         let finalDirectory = postsRoot.appendingPathComponent(archiveID.uuidString, isDirectory: true)
         let filename = "0-text-card.png"
         let mediaURL = temporary.appendingPathComponent("media", isDirectory: true).appendingPathComponent(filename)
@@ -191,14 +192,20 @@ actor ArchiveStore {
         let manifestURL = importedDirectory.appendingPathComponent("manifest.json")
         let summaryURL = importedDirectory.appendingPathComponent("summary.json")
         let manifest = try JSONDecoder.stashy.decode(ArchiveManifest.self, from: Data(contentsOf: manifestURL))
-        guard manifest.schemaVersion <= ArchiveManifest.currentSchemaVersion else { throw StashPackageError.unsupportedSchema }
+        guard manifest.schemaVersion == ArchiveManifest.currentSchemaVersion else { throw StashPackageError.unsupportedSchema }
         let summary = try JSONDecoder.stashy.decode(ArchivedPostSummary.self, from: Data(contentsOf: summaryURL))
-        guard manifest.archiveID == summary.id, summary.localFolderName == manifest.archiveID.uuidString else { throw StashPackageError.invalidPackage }
+        guard manifest.archiveID == summary.id,
+              summary.localFolderName == manifest.archiveID.uuidString,
+              summary.platform == manifest.platform,
+              summary.author == manifest.author.displayName,
+              summary.mediaCount == manifest.orderedMedia.count
+        else { throw StashPackageError.invalidPackage }
         for media in manifest.orderedMedia {
             guard let filename = media.localFilename, filename == URL(fileURLWithPath: filename).lastPathComponent else { throw StashPackageError.unsafePath }
             let mediaURL = importedDirectory.appendingPathComponent("media", isDirectory: true).appendingPathComponent(filename)
             guard fileManager.fileExists(atPath: mediaURL.path) else { throw StashPackageError.invalidPackage }
-            if let expected = media.checksumSHA256, try SHA256.fileDigest(mediaURL) != expected { throw StashPackageError.checksumMismatch }
+            guard let expected = media.checksumSHA256, !expected.isEmpty else { throw StashPackageError.checksumMismatch }
+            guard try SHA256.fileDigest(mediaURL) == expected else { throw StashPackageError.checksumMismatch }
             try MediaIntegrityVerifier.validate(file: mediaURL, type: media.type)
         }
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
@@ -216,8 +223,6 @@ actor ArchiveStore {
     }
 
     private func rebuildIndexIfNeeded() async throws {
-        let indexed = try await database.summaries()
-        guard indexed.isEmpty else { return }
         for summary in fileSummaries() { try await database.upsert(summary) }
     }
 

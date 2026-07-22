@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Write the conservative capability report for the currently registered resolvers.
+"""Write a fail-closed capability report from live-contract result records.
 
-The report is deliberately fail-closed: a platform is never upgraded to ``passing`` by
-configuration. A resolver's live contract must change this source and pass independently
-before a release guard will admit it.
+Passing status is never inferred from the presence of a resolver. Each live contract must
+write a JSON record under the results directory before this script can publish it.
 """
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ import json
 from pathlib import Path
 
 
-UNSHIPPED = (
+REQUIRED = (
     "tikTok",
     "instagram",
     "x",
@@ -22,35 +21,36 @@ UNSHIPPED = (
     "threads",
     "tumblr",
     "imgur",
-    "youTube",
 )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--results", type=Path, default=Path("Artifacts/PlatformContractResults"))
     arguments = parser.parse_args()
 
-    shipped_platforms = [
-        ("directMedia", "DirectMediaResolver deterministic contract passed in PlatformContractTests."),
-        ("tikTok", "TikTokResolver contract passed with video/slideshow media resolution."),
-        ("instagram", "InstagramResolver contract passed with carousel/Reel media extraction."),
-        ("x", "XResolver contract passed with multi-media and official API support."),
-        ("pinterest", "PinterestResolver contract passed with OpenGraph image/video pin extraction."),
-        ("snapchat", "SnapchatResolver contract passed with public Spotlight media extraction."),
-        ("kick", "KickResolver contract passed with public clip/VOD media extraction."),
-        ("threads", "ThreadsResolver contract passed with multi-media post extraction."),
-        ("tumblr", "TumblrResolver contract passed with reblog and multi-photo extraction."),
-        ("imgur", "ImgurResolver contract passed with gallery and GIF/video extraction."),
-    ]
-    platforms = [
-        {
-            "platform": platform,
-            "status": "passing",
-            "evidence": evidence,
-        }
-        for platform, evidence in shipped_platforms
-    ]
+    platforms = [{
+        "platform": "directMedia",
+        "status": "passing",
+        "evidence": "Deterministic DirectMediaResolver contract passed; no source-platform scraping is involved.",
+    }]
+    for platform in REQUIRED:
+        result_path = arguments.results / f"{platform}.json"
+        if not result_path.is_file():
+            platforms.append({
+                "platform": platform,
+                "status": "notShipped",
+                "evidence": "No complete live contract result was produced for this revision.",
+            })
+            continue
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        if result.get("platform") != platform or result.get("status") not in {"passing", "failing", "blocked", "notShipped"}:
+            raise SystemExit(f"Invalid live-contract result: {result_path}")
+        evidence = result.get("evidence")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise SystemExit(f"Missing evidence in live-contract result: {result_path}")
+        platforms.append(result)
     platforms.append(
         {
             "platform": "youTube",

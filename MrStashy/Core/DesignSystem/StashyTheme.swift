@@ -19,53 +19,19 @@ struct StashyBackground: View {
     }
 }
 
-enum IllustrationPlacement: String, Sendable {
-    case onboarding, header, results, emptyState, detail, textCard
-}
-
-/// A deliberately asset-free compositional reserve. Future illustrations can replace this
-/// view in one place without changing any screen's spacing, accessibility, or state flow.
-struct IllustrationSlot: View {
-    let placement: IllustrationPlacement
-    var height: CGFloat = 92
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: height * 0.28, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [StashyTheme.aqua.opacity(0.22), StashyTheme.lavender.opacity(0.16), StashyTheme.butter.opacity(0.18)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: height * 0.28, style: .continuous)
-                    .strokeBorder(StashyTheme.charcoal.opacity(0.10), style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
-            }
-            .frame(height: height)
-            .accessibilityHidden(true)
-    }
-}
-
-struct IllustratedHeader: View {
+struct FeatureHeader: View {
     @Environment(\.colorScheme) private var colorScheme
     let titleKey: String
     let subtitleKey: String
-    var placement: IllustrationPlacement = .header
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(L10n.value(titleKey))
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(colorScheme == .dark ? StashyTheme.cream : StashyTheme.charcoal)
-                Text(L10n.value(subtitleKey))
-                    .font(.subheadline)
-                    .foregroundStyle(colorScheme == .dark ? StashyTheme.cream.opacity(0.72) : StashyTheme.charcoal.opacity(0.72))
-            }
-            Spacer(minLength: 8)
-            IllustrationSlot(placement: placement, height: 76)
-                .frame(width: 104)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(L10n.value(titleKey))
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(colorScheme == .dark ? StashyTheme.cream : StashyTheme.charcoal)
+            Text(L10n.value(subtitleKey))
+                .font(.subheadline)
+                .foregroundStyle(colorScheme == .dark ? StashyTheme.cream.opacity(0.72) : StashyTheme.charcoal.opacity(0.72))
         }
         .padding(.horizontal, 4)
     }

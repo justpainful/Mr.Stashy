@@ -3,52 +3,52 @@
     {
       "platform": "directMedia",
       "status": "passing",
-      "evidence": "DirectMediaResolver deterministic contract passed in PlatformContractTests."
+      "evidence": "Deterministic DirectMediaResolver contract passed; no source-platform scraping is involved."
     },
     {
       "platform": "tikTok",
-      "status": "passing",
-      "evidence": "TikTokResolver contract passed with video/slideshow media resolution."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "instagram",
-      "status": "passing",
-      "evidence": "InstagramResolver contract passed with carousel/Reel media extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "x",
-      "status": "passing",
-      "evidence": "XResolver contract passed with multi-media and official API support."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "pinterest",
-      "status": "passing",
-      "evidence": "PinterestResolver contract passed with OpenGraph image/video pin extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "snapchat",
-      "status": "passing",
-      "evidence": "SnapchatResolver contract passed with public Spotlight media extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "kick",
-      "status": "passing",
-      "evidence": "KickResolver contract passed with public clip/VOD media extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "threads",
-      "status": "passing",
-      "evidence": "ThreadsResolver contract passed with multi-media post extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "tumblr",
-      "status": "passing",
-      "evidence": "TumblrResolver contract passed with reblog and multi-photo extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "imgur",
-      "status": "passing",
-      "evidence": "ImgurResolver contract passed with gallery and GIF/video extraction."
+      "status": "notShipped",
+      "evidence": "No complete live contract result was produced for this revision."
     },
     {
       "platform": "youTube",

@@ -12,7 +12,7 @@ struct SettingsView: View {
             StashyBackground()
             Form {
                 Section {
-                    IllustratedHeader(titleKey: "settings.title", subtitleKey: "settings.subtitle")
+                    FeatureHeader(titleKey: "settings.title", subtitleKey: "settings.subtitle")
                 }
                 Section(String(localized: "settings.downloads")) {
                     Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.allCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
