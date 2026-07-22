@@ -73,6 +73,8 @@ struct ResolverRegistry: Sendable {
             case .tikTok: verified.append(TikTokResolver())
             case .instagram: verified.append(InstagramResolver())
             case .x: verified.append(XResolver())
+            case .pinterest, .snapchat, .kick, .threads, .tumblr, .imgur:
+                verified.append(PublicOpenGraphResolver(platform: capability.platform))
             default: break
             }
         }
