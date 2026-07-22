@@ -40,7 +40,7 @@ let project = Project(
             sources: ["MrStashy/**", "Shared/**"],
             resources: ["Resources/**"],
             entitlements: "MrStashy/MrStashy.entitlements",
-            dependencies: [.target(name: "StashyShareExtension"), .sdk(name: "libsqlite3.tbd", type: .library), .package(product: "ZIPFoundation")]
+            dependencies: [.target(name: "StashyShareExtension"), .sdk(name: "sqlite3", type: .library), .package(product: "ZIPFoundation")]
         ),
         .target(
             name: "StashyShareExtension",
