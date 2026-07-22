@@ -3,8 +3,8 @@ import XCTest
 @MainActor
 final class ScreenshotFlows: XCTestCase {
     private var screenshotsDirectory: URL {
-        let path = ProcessInfo.processInfo.environment["SCREENSHOTS_DIR"] ?? "Artifacts/Screenshots"
-        return URL(fileURLWithPath: path, isDirectory: true)
+        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("StashyScreenshots", isDirectory: true)
     }
 
     func testCaptureReleaseScreens() throws {
@@ -74,7 +74,12 @@ final class ScreenshotFlows: XCTestCase {
 
     private func capture(_ app: XCUIApplication, named name: String) {
         let destination = screenshotsDirectory.appendingPathComponent(name)
-        let data = app.screenshot().pngRepresentation
+        let screenshot = app.screenshot()
+        let data = screenshot.pngRepresentation
         XCTAssertNoThrow(try data.write(to: destination, options: .atomic), "Could not write \(name)")
+        let attachment = XCTAttachment(image: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
