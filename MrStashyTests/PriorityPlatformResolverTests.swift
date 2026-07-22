@@ -78,6 +78,30 @@ struct PriorityPlatformResolverTests {
         #expect(post.media[1].duration == 12)
     }
 
+    @Test func platformShortLinkExpanderReturnsTheCanonicalDestinationWithoutReadingFullMedia() async throws {
+        let shortLink = try #require(URL(string: "https://t.co/stashy"))
+        let destination = try #require(URL(string: "https://x.com/stashy/status/1234567890?utm_source=share"))
+        let expander = PlatformShortLinkExpander(client: RedirectingResolverClient(destination: destination))
+
+        let expanded = try await expander.destination(for: shortLink)
+
+        #expect(expanded == destination)
+    }
+
+    @Test func priorityPlatformShortLinksAreRecognizedBeforeResolverSelection() throws {
+        let links = [
+            "https://t.co/stashy",
+            "https://instagr.am/p/public-fixture/",
+            "https://vm.tiktok.com/ZStashy/",
+            "https://vt.tiktok.com/ZStashy/"
+        ]
+
+        for link in links {
+            let source = try #require(URL(string: link))
+            #expect(URLCanonicalizer.isPlatformShortLink(source))
+        }
+    }
+
     private func sourceURL(for platform: Platform) -> String {
         switch platform {
         case .tikTok: "https://www.tiktok.com/@stashy/video/1234567890"
@@ -113,6 +137,21 @@ private struct FixtureDataResolverClient: ResolverHTTPClient {
             headerFields: ["Content-Type": "application/json"]
         )!
         return (Data(json.utf8), response)
+    }
+}
+
+private struct RedirectingResolverClient: ResolverHTTPClient {
+    let destination: URL
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        #expect(request.value(forHTTPHeaderField: "Range") == "bytes=0-8191")
+        let response = HTTPURLResponse(
+            url: destination,
+            statusCode: 206,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Range": "bytes 0-8191/8192"]
+        )!
+        return (Data(), response)
     }
 }
 

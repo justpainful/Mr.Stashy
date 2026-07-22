@@ -12,6 +12,32 @@ struct URLSessionResolverHTTPClient: ResolverHTTPClient {
     }
 }
 
+protocol URLRedirectExpanding: Sendable {
+    func destination(for url: URL) async throws -> URL
+}
+
+/// Expands only a recognized platform short link. The request is range-limited because this
+/// step needs the final URL, not a full page or media download. `URLSession` follows normal
+/// HTTPS redirects and exposes the final source URL on the HTTP response.
+struct PlatformShortLinkExpander: URLRedirectExpanding {
+    private let client: any ResolverHTTPClient
+
+    init(client: any ResolverHTTPClient = URLSessionResolverHTTPClient()) {
+        self.client = client
+    }
+
+    func destination(for url: URL) async throws -> URL {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue("bytes=0-8191", forHTTPHeaderField: "Range")
+        request.setValue("Stashy/0.1 (local archive client)", forHTTPHeaderField: "User-Agent")
+        let (_, response) = try await client.data(for: request)
+        try validate(response)
+        guard let destination = response.url else { throw ResolverError.invalidResponse }
+        return destination
+    }
+}
+
 protocol ResolverCredentialProvider: Sendable {
     func value(for credential: ResolverCredential) -> String?
 }
@@ -35,8 +61,9 @@ struct ResolveRequest: Sendable {
 
 struct ResolverRegistry: Sendable {
     private let resolvers: [any PlatformResolver]
+    private let shortLinkExpander: any URLRedirectExpanding
 
-    init() {
+    init(shortLinkExpander: any URLRedirectExpanding = PlatformShortLinkExpander()) {
         // A resolver becomes reachable only once the generated capability matrix records a
         // passing live contract. Modules may exist for development and deterministic tests,
         // but they cannot make the product claim a platform is supported before that proof.
@@ -50,10 +77,14 @@ struct ResolverRegistry: Sendable {
             }
         }
         resolvers = verified
+        self.shortLinkExpander = shortLinkExpander
     }
 
     func resolve(_ url: URL) async throws -> ResolvedPost {
-        let canonical = try URLCanonicalizer.canonicalize(url)
+        var canonical = try URLCanonicalizer.canonicalize(url)
+        if !URLCanonicalizer.isDirectMedia(canonical), URLCanonicalizer.isPlatformShortLink(canonical) {
+            canonical = try URLCanonicalizer.canonicalize(await shortLinkExpander.destination(for: canonical))
+        }
         let request = ResolveRequest(originalURL: url, canonicalURL: canonical)
         guard let resolver = resolvers.first(where: { $0.canHandle(canonical) }) else {
             throw ResolverError.unsupportedURL

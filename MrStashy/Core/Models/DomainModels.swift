@@ -7,7 +7,7 @@ enum Platform: String, Codable, CaseIterable, Sendable, Identifiable {
     var hostnames: [String] {
         switch self {
         case .tikTok: ["tiktok.com"]
-        case .instagram: ["instagram.com"]
+        case .instagram: ["instagram.com", "instagr.am"]
         case .x: ["x.com", "twitter.com"]
         case .pinterest: ["pinterest.com", "pin.it"]
         case .snapchat: ["snapchat.com"]

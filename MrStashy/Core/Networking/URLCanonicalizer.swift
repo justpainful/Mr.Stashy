@@ -1,6 +1,13 @@
 import Foundation
 
 enum URLCanonicalizer {
+    private static let shortLinkHosts: Set<String> = [
+        "instagr.am",
+        "t.co",
+        "vm.tiktok.com",
+        "vt.tiktok.com"
+    ]
+
     static func canonicalize(_ url: URL) throws -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let host = components.host?.lowercased(),
@@ -27,5 +34,13 @@ enum URLCanonicalizer {
     static func isDirectMedia(_ url: URL) -> Bool {
         let extensionName = url.pathExtension.lowercased()
         return ["jpg", "jpeg", "png", "heic", "gif", "webp", "mp4", "mov", "m4v", "mp3", "m4a", "wav"].contains(extensionName)
+    }
+
+    /// Short links do not contain enough information to choose a platform resolver. Resolve
+    /// only the well-known source-platform shorteners, and only after a user explicitly asks
+    /// Stashy to catch the link.
+    static func isPlatformShortLink(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased().replacingOccurrences(of: "www.", with: "") else { return false }
+        return shortLinkHosts.contains(host)
     }
 }
