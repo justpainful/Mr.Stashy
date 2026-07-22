@@ -86,7 +86,7 @@ private struct LocalMediaCard: View {
             HStack {
                 Image(systemName: record.type.systemImage).font(.title2).foregroundStyle(StashyTheme.green)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(String(localized: "media.\(record.type.rawValue)")).font(.headline)
+                    Text(L10n.value("media.\(record.type.rawValue)")).font(.headline)
                     Text(record.checksumSHA256 ?? String(localized: "livingPost.pendingChecksum")).font(.caption2.monospaced()).lineLimit(1)
                 }
                 Spacer()

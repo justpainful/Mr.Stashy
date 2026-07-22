@@ -15,7 +15,7 @@ struct LibraryView: View {
             StashyBackground()
             VStack(spacing: 14) {
                 Picker(String(localized: "library.mode"), selection: $mode) {
-                    ForEach(LibraryMode.allCases) { mode in Text(String(localized: "library.mode.\(mode.rawValue)")).tag(mode) }
+                    ForEach(LibraryMode.allCases) { mode in Text(L10n.value("library.mode.\(mode.rawValue)")).tag(mode) }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 20)

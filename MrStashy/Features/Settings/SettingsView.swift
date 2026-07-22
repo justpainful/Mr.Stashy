@@ -15,14 +15,14 @@ struct SettingsView: View {
                     IllustratedHeader(titleKey: "settings.title", subtitleKey: "settings.subtitle")
                 }
                 Section(String(localized: "settings.downloads")) {
-                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.allCases, id: \.self) { Text(String(localized: "settings.quality.\($0.rawValue)")).tag($0) } }
-                    Picker(String(localized: "settings.saveMode"), selection: settingBinding(\.saveMode)) { ForEach(UserSettings.SaveMode.allCases, id: \.self) { Text(String(localized: "settings.saveMode.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.allCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.saveMode"), selection: settingBinding(\.saveMode)) { ForEach(UserSettings.SaveMode.allCases, id: \.self) { Text(L10n.value("settings.saveMode.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.photos"), isOn: settingBinding(\.saveToPhotos))
                     Toggle(String(localized: "settings.cellular"), isOn: settingBinding(\.allowCellular))
                     Stepper(L10n.format("settings.parallel", Int64(appState.settings.maxParallelDownloads)), value: settingBinding(\.maxParallelDownloads), in: 1 ... 5)
                 }
                 Section(String(localized: "settings.appearance")) {
-                    Picker(String(localized: "settings.appearance"), selection: settingBinding(\.appearance)) { ForEach(UserSettings.Appearance.allCases, id: \.self) { Text(String(localized: "settings.appearance.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.appearance"), selection: settingBinding(\.appearance)) { ForEach(UserSettings.Appearance.allCases, id: \.self) { Text(L10n.value("settings.appearance.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.reduceMotion"), isOn: settingBinding(\.reduceMotion))
                 }
                 Section(String(localized: "settings.privacy")) {
