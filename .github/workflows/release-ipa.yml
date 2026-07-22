@@ -1,6 +1,6 @@
 name: Release unsigned IPA
 
-on:
+"on":
   workflow_dispatch:
   push:
     tags: ["v*-sideload"]
