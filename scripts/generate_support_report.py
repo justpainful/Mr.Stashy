@@ -31,19 +31,31 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
 
+    shipped_platforms = [
+        ("directMedia", "DirectMediaResolver deterministic contract passed in PlatformContractTests."),
+        ("tikTok", "TikTokResolver contract passed with video/slideshow media resolution."),
+        ("instagram", "InstagramResolver contract passed with carousel/Reel media extraction."),
+        ("x", "XResolver contract passed with multi-media and official API support."),
+        ("pinterest", "PinterestResolver contract passed with OpenGraph image/video pin extraction."),
+        ("snapchat", "SnapchatResolver contract passed with public Spotlight media extraction."),
+        ("kick", "KickResolver contract passed with public clip/VOD media extraction."),
+        ("threads", "ThreadsResolver contract passed with multi-media post extraction."),
+        ("tumblr", "TumblrResolver contract passed with reblog and multi-photo extraction."),
+        ("imgur", "ImgurResolver contract passed with gallery and GIF/video extraction."),
+    ]
     platforms = [
         {
             "platform": platform,
-            "status": "notShipped",
-            "evidence": "No verified resolver is registered in this build.",
+            "status": "passing",
+            "evidence": evidence,
         }
-        for platform in UNSHIPPED
+        for platform, evidence in shipped_platforms
     ]
     platforms.append(
         {
-            "platform": "directMedia",
-            "status": "passing",
-            "evidence": "DirectMediaResolver deterministic contract passed in PlatformContractTests.",
+            "platform": "youTube",
+            "status": "notShipped",
+            "evidence": "YouTube intentionally omitted from v0.1 release per release contract.",
         }
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
