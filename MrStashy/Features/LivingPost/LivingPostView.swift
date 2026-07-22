@@ -106,7 +106,7 @@ private struct LocalMediaCard: View {
                             }
                         }
                     } label: {
-                        Label(String(localized: savedToPhotos ? "livingPost.savedToPhotos" : "livingPost.saveToPhotos"), systemImage: savedToPhotos ? "checkmark" : "photo.badge.arrow.down")
+                        Label(L10n.value(savedToPhotos ? "livingPost.savedToPhotos" : "livingPost.saveToPhotos"), systemImage: savedToPhotos ? "checkmark" : "photo.badge.arrow.down")
                     }
                     .buttonStyle(.glass)
                 }

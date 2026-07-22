@@ -57,7 +57,7 @@ struct LibraryView: View {
     @ViewBuilder private var content: some View {
         if (mode == .posts && entries.isEmpty) || (mode == .media && mediaEntries.isEmpty) {
             ContentUnavailableView {
-                Label(String(localized: mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
+                Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
             } description: {
                 Text(String(localized: "library.empty.body"))
             }

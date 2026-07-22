@@ -40,7 +40,7 @@ struct TextCardComposer: View {
                     Toggle(String(localized: "textCard.saveToPhotos"), isOn: $saveToPhotos)
 
                     Button { Task { await save() } } label: {
-                        Label(String(localized: didSave ? "textCard.saved" : "textCard.save"), systemImage: "square.and.arrow.down")
+                        Label(L10n.value(didSave ? "textCard.saved" : "textCard.save"), systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.glassProminent)
                     .accessibilityIdentifier("textCard.save")
