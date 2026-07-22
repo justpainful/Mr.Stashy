@@ -50,6 +50,8 @@ let project = Project(
             deploymentTargets: .iOS("26.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "Stashy",
+                "CFBundleShortVersionString": "0.1.0",
+                "CFBundleVersion": "1",
                 "NSExtension": [
                     "NSExtensionPointIdentifier": "com.apple.share-services",
                     "NSExtensionPrincipalClass": "$(PRODUCT_MODULE_NAME).ShareViewController",

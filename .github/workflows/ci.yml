@@ -109,6 +109,7 @@ jobs:
       - name: Build the app for an available Pro Max simulator
         run: |
           device="$(bash scripts/boot_simulator.sh)"
+          mkdir -p Artifacts/Logs
           bash scripts/build.sh "$SCHEME" "platform=iOS Simulator,id=$device" 2>&1 | tee Artifacts/Logs/simulator-build.log
       - uses: actions/upload-artifact@v4
         if: always()
