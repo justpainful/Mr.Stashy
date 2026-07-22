@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class ScreenshotFlows: XCTestCase {
     private var screenshotsDirectory: URL {
         let path = ProcessInfo.processInfo.environment["SCREENSHOTS_DIR"] ?? "Artifacts/Screenshots"
