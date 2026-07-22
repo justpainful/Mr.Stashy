@@ -79,9 +79,15 @@ struct ResolvedMedia: Codable, Hashable, Sendable, Identifiable {
     var altText: String?
 
     var highestVariant: MediaVariant? {
-        variants.sorted {
-            ($0.width ?? 0) * ($0.height ?? 0) > ($1.width ?? 0) * ($1.height ?? 0)
-        }.first
+        variants.max { lhs, rhs in
+            let lhsPixels = (lhs.width ?? 0) * (lhs.height ?? 0)
+            let rhsPixels = (rhs.width ?? 0) * (rhs.height ?? 0)
+            if lhsPixels != rhsPixels { return lhsPixels < rhsPixels }
+            let lhsBitrate = lhs.bitrate ?? 0
+            let rhsBitrate = rhs.bitrate ?? 0
+            if lhsBitrate != rhsBitrate { return lhsBitrate < rhsBitrate }
+            return (lhs.estimatedBytes ?? 0) < (rhs.estimatedBytes ?? 0)
+        }
     }
 }
 
