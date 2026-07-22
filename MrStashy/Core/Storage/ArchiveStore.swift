@@ -266,7 +266,7 @@ enum MediaIntegrityVerifier {
         }
         switch type {
         case .photo, .gif:
-            guard header.starts(with: [0xFF, 0xD8]) || header.starts(with: [0x89, 0x50, 0x4E, 0x47]) || header.starts(with: Data("GIF".utf8)) || header.starts(with: Data("RIFF".utf8)) else { throw ResolverError.verificationFailure }
+            guard header.starts(with: [0xFF, 0xD8]) || header.starts(with: [0x89, 0x50, 0x4E, 0x47]) || header.starts(with: Data("GIF".utf8)) || header.starts(with: Data("RIFF".utf8)) || (header.count >= 8 && header[4...7] == Data("ftyp".utf8)) else { throw ResolverError.verificationFailure }
         case .video:
             guard header.count >= 8, header[4...7] == Data("ftyp".utf8) else { throw ResolverError.verificationFailure }
         case .audio:

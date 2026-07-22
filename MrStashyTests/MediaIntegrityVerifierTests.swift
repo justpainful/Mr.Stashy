@@ -4,10 +4,15 @@ import Testing
 
 struct MediaIntegrityVerifierTests {
     @Test func acceptsKnownImageSignatures() throws {
-        let file = try temporaryFile(containing: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
-        defer { try? FileManager.default.removeItem(at: file) }
+        let png = try temporaryFile(containing: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+        let heic = try temporaryFile(containing: Data([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63]))
+        defer {
+            try? FileManager.default.removeItem(at: png)
+            try? FileManager.default.removeItem(at: heic)
+        }
 
-        try MediaIntegrityVerifier.validate(file: file, type: .photo)
+        try MediaIntegrityVerifier.validate(file: png, type: .photo)
+        try MediaIntegrityVerifier.validate(file: heic, type: .photo)
     }
 
     @Test func rejectsHtmlAndTooShortAudioWithoutTrapping() throws {
