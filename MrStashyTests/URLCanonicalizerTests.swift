@@ -48,4 +48,22 @@ struct URLCanonicalizerTests {
             "https://cdn.example.com/third.jpg"
         ])
     }
+
+    @Test func openGraphParserAssociatesStructuredMetadataWithTheCorrectOrderedMedia() {
+        let document = OpenGraphDocument(html: """
+        <meta property="og:image" content="https://cdn.example.com/first.jpg">
+        <meta property="og:image:width" content="2048">
+        <meta property="og:image:height" content="1365">
+        <meta property="og:image:alt" content="First source image">
+        <meta property="og:video" content="https://cdn.example.com/second.mp4">
+        <meta property="og:video:width" content="1920">
+        <meta property="og:video:height" content="1080">
+        <meta property="og:video:duration" content="12.5">
+        """)
+
+        #expect(document.media.map(\.width) == [2048, 1920])
+        #expect(document.media.map(\.height) == [1365, 1080])
+        #expect(document.media[0].alt == "First source image")
+        #expect(document.media[1].duration == 12.5)
+    }
 }

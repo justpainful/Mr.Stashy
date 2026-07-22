@@ -144,7 +144,11 @@ struct PublicOpenGraphResolver: PlatformResolver {
                 bitrate: nil, fps: nil, isHDR: nil, codec: nil, container: url.pathExtension.lowercased(), hasSeparateAudio: false,
                 estimatedBytes: nil, qualityLabel: "Source-exposed", cleanliness: .unknown
             )
-            return ResolvedMedia(id: UUID(), orderIndex: index, type: type, thumbnailURL: nil, variants: [variant], width: candidate.width, height: candidate.height, duration: nil, altText: candidate.alt)
+            return ResolvedMedia(
+                id: UUID(), orderIndex: index, type: type, thumbnailURL: nil,
+                variants: [variant], width: candidate.width, height: candidate.height,
+                duration: candidate.duration, altText: candidate.alt
+            )
         }
         guard !media.isEmpty else { throw ResolverError.mediaMissing }
         return ResolvedPost(
@@ -363,6 +367,7 @@ struct OpenGraphCandidate {
     var type: String?
     var width: Int?
     var height: Int?
+    var duration: TimeInterval?
     var alt: String?
 }
 
@@ -376,19 +381,40 @@ struct OpenGraphDocument {
         var values: [String: [String]] = [:]
         var orderedMedia: [OpenGraphCandidate] = []
         var seenMediaURLs = Set<String>()
+        var mostRecentImage: Int?
+        var mostRecentVideo: Int?
         for tag in tags {
             let fragment = String(html[Range(tag.range, in: html)!])
             let pairs = Self.attributePairs(in: fragment)
             guard let name = (pairs["property"] ?? pairs["name"])?.lowercased(), let content = pairs["content"] else { continue }
             values[name, default: []].append(content)
-            let type: String?
             switch name {
-            case "og:image", "og:image:url", "twitter:image": type = "image"
-            case "og:video", "og:video:url", "twitter:player:stream": type = "video"
-            default: type = nil
-            }
-            if let type, seenMediaURLs.insert(content).inserted {
-                orderedMedia.append(.init(url: content, type: type, width: nil, height: nil, alt: nil))
+            case "og:image", "og:image:url":
+                if seenMediaURLs.insert(content).inserted {
+                    orderedMedia.append(.init(url: content, type: "image", width: nil, height: nil, duration: nil, alt: nil))
+                    mostRecentImage = orderedMedia.indices.last
+                }
+            case "og:video", "og:video:url", "twitter:player:stream":
+                if seenMediaURLs.insert(content).inserted {
+                    orderedMedia.append(.init(url: content, type: "video", width: nil, height: nil, duration: nil, alt: nil))
+                    mostRecentVideo = orderedMedia.indices.last
+                }
+            case "og:image:width":
+                if let mostRecentImage, let width = Int(content) { orderedMedia[mostRecentImage].width = width }
+            case "og:image:height":
+                if let mostRecentImage, let height = Int(content) { orderedMedia[mostRecentImage].height = height }
+            case "og:image:alt":
+                if let mostRecentImage { orderedMedia[mostRecentImage].alt = content }
+            case "og:video:width":
+                if let mostRecentVideo, let width = Int(content) { orderedMedia[mostRecentVideo].width = width }
+            case "og:video:height":
+                if let mostRecentVideo, let height = Int(content) { orderedMedia[mostRecentVideo].height = height }
+            case "og:video:duration":
+                if let mostRecentVideo, let duration = TimeInterval(content), duration >= 0 {
+                    orderedMedia[mostRecentVideo].duration = duration
+                }
+            default:
+                break
             }
         }
         attributes = values
@@ -402,8 +428,8 @@ struct OpenGraphDocument {
         if !orderedMediaCandidates.isEmpty { return orderedMediaCandidates }
         let videos = attributes["og:video"] ?? attributes["og:video:url"] ?? attributes["twitter:player:stream"] ?? []
         let images = attributes["og:image"] ?? attributes["og:image:url"] ?? attributes["twitter:image"] ?? []
-        let videoItems = videos.map { OpenGraphCandidate(url: $0, type: "video", width: nil, height: nil, alt: nil) }
-        let imageItems = images.map { OpenGraphCandidate(url: $0, type: "image", width: nil, height: nil, alt: nil) }
+        let videoItems = videos.map { OpenGraphCandidate(url: $0, type: "video", width: nil, height: nil, duration: nil, alt: nil) }
+        let imageItems = images.map { OpenGraphCandidate(url: $0, type: "image", width: nil, height: nil, duration: nil, alt: nil) }
         return imageItems + videoItems
     }
 
