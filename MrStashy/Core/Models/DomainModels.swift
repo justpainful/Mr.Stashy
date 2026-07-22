@@ -154,6 +154,7 @@ struct QueueItem: Identifiable, Equatable {
     var post: ResolvedPost
     var selectedMediaIDs: Set<UUID>
     var mode: SaveMode
+    var quality: UserSettings.Quality = .original
     var stage: Stage = .creatingArchive
     var progress: Double = 0
     var bytesDownloaded: Int64 = 0

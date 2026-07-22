@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StashyRootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         Group {
@@ -13,6 +14,8 @@ struct StashyRootView: View {
         }
         .tint(StashyTheme.green)
         .preferredColorScheme(appState.settings.appearance.colorScheme)
+        .environment(\.locale, appState.settings.language.locale)
+        .environment(\.accessibilityReduceMotion, systemReduceMotion || appState.settings.reduceMotion)
         .onOpenURL(perform: appState.handleOpenURL)
         .alert(String(localized: "error.title"), isPresented: Binding(get: { appState.lastError != nil }, set: { if !$0 { appState.lastError = nil } })) {
             Button(String(localized: "action.done")) { appState.lastError = nil }

@@ -15,7 +15,7 @@ Tuist is pinned to 4.64.1 in both `.tuist-version` and `.tool-versions`; `jdx/mi
 | `screenshots.yml` | Manual/release-candidate visual flow capture and screenshot ZIP artifact |
 | `release-ipa.yml` | `v*-sideload` tag/manual end-to-end release gate, live contracts, screenshots, unsigned IPA, dSYMs, quality reports, and the GitHub Release only after every gate passes |
 
-PR CI runs project generation once as a prerequisite, then executes simulator build, tests, UI tests, and unsigned packaging in parallel. The final Ubuntu guard reuses the IPA and screenshot artifacts instead of rebuilding them. Workflow concurrency cancels obsolete runs after a newer commit is pushed.
+PR CI starts project generation, tests, UI tests, and unsigned packaging immediately; the standalone simulator build follows the project-generation check. The final Ubuntu guard reuses the IPA and screenshot artifacts instead of rebuilding them. Workflow concurrency cancels obsolete runs after a newer commit is pushed.
 
 The release workflow fails closed. It does not publish merely because an archive was built: all contract evidence, audits, screenshot files, alpha validation, tests, and package checks must pass.
 

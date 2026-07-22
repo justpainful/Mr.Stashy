@@ -135,12 +135,12 @@ final class AppState {
         }
     }
 
-    func enqueueFullPost(_ post: ResolvedPost, selectedIDs: Set<UUID>) {
-        enqueue(post: post, selectedIDs: selectedIDs, mode: .fullPost)
+    func enqueueFullPost(_ post: ResolvedPost, selectedIDs: Set<UUID>, quality: UserSettings.Quality? = nil) {
+        enqueue(post: post, selectedIDs: selectedIDs, mode: .fullPost, quality: quality ?? settings.quality)
     }
 
-    func enqueueMediaOnly(_ post: ResolvedPost, selectedIDs: Set<UUID>) {
-        enqueue(post: post, selectedIDs: selectedIDs, mode: .mediaOnly)
+    func enqueueMediaOnly(_ post: ResolvedPost, selectedIDs: Set<UUID>, quality: UserSettings.Quality? = nil) {
+        enqueue(post: post, selectedIDs: selectedIDs, mode: .mediaOnly, quality: quality ?? settings.quality)
     }
 
     func cancelQueueItem(id: UUID) {
@@ -164,8 +164,8 @@ final class AppState {
         activeSaveTasks[id] != nil
     }
 
-    private func enqueue(post: ResolvedPost, selectedIDs: Set<UUID>, mode: QueueItem.SaveMode) {
-        var item = QueueItem(post: post, selectedMediaIDs: selectedIDs, mode: mode, stage: .waiting)
+    private func enqueue(post: ResolvedPost, selectedIDs: Set<UUID>, mode: QueueItem.SaveMode, quality: UserSettings.Quality) {
+        var item = QueueItem(post: post, selectedMediaIDs: selectedIDs, mode: mode, quality: quality, stage: .waiting)
         item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
         queueItems.insert(item, at: 0)
         startSave(item)
@@ -178,7 +178,8 @@ final class AppState {
                 id: item.id,
                 sourceURL: item.post.originalURL,
                 selectedOrderIndices: Set(item.post.media.filter { item.selectedMediaIDs.contains($0.id) }.map(\.orderIndex)),
-                mode: item.mode
+                mode: item.mode,
+                quality: item.quality
             )
             do {
                 try await pendingQueueStore.upsert(request)
@@ -209,7 +210,7 @@ final class AppState {
                 selectedMediaIDs: item.selectedMediaIDs,
                 mediaOnly: mediaOnly,
                 allowCellular: settings.allowCellular,
-                quality: settings.quality
+                quality: item.quality
             ) { [weak self] progress in
                 await self?.apply(progress, toQueueItem: item.id)
             }
@@ -239,7 +240,7 @@ final class AppState {
             do {
                 let post = try await resolverRegistry.resolve(request.sourceURL)
                 let selectedIDs = Set(post.media.filter { request.selectedOrderIndices.contains($0.orderIndex) }.map(\.id))
-                var item = QueueItem(id: request.id, post: post, selectedMediaIDs: selectedIDs, mode: request.mode, stage: .waiting)
+                var item = QueueItem(id: request.id, post: post, selectedMediaIDs: selectedIDs, mode: request.mode, quality: request.quality ?? .original, stage: .waiting)
                 item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
                 queueItems.append(item)
                 startSave(item)

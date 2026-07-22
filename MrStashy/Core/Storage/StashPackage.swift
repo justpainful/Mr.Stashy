@@ -26,7 +26,9 @@ enum StashPackage {
     static func write(archiveDirectory: URL, to destination: URL) throws {
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: destination.path) { try fileManager.removeItem(at: destination) }
-        guard let zip = Archive(url: destination, accessMode: .create) else { throw StashPackageError.invalidPackage }
+        let zip: Archive
+        do { zip = try Archive(url: destination, accessMode: .create) }
+        catch { throw StashPackageError.invalidPackage }
         guard let enumerator = fileManager.enumerator(at: archiveDirectory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
             throw StashPackageError.invalidPackage
         }
@@ -42,7 +44,9 @@ enum StashPackage {
 
     static func extract(from source: URL, into destination: URL) throws {
         let fileManager = FileManager.default
-        guard let zip = Archive(url: source, accessMode: .read) else { throw StashPackageError.invalidPackage }
+        let zip: Archive
+        do { zip = try Archive(url: source, accessMode: .read) }
+        catch { throw StashPackageError.invalidPackage }
         var totalBytes: UInt64 = 0
         var packageRoot: String?
         var paths = Set<String>()
@@ -68,7 +72,7 @@ enum StashPackage {
                 try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try zip.extract(entry, to: target)
+                _ = try zip.extract(entry, to: target)
             }
         }
     }

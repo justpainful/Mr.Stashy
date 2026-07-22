@@ -5,6 +5,7 @@ struct PendingQueueRequest: Codable, Sendable, Identifiable {
     var sourceURL: URL
     var selectedOrderIndices: Set<Int>
     var mode: QueueItem.SaveMode
+    var quality: UserSettings.Quality?
 }
 
 actor PendingQueueStore {

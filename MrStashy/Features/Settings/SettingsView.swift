@@ -17,7 +17,7 @@ struct SettingsView: View {
                     FeatureHeader(titleKey: "settings.title", subtitleKey: "settings.subtitle")
                 }
                 Section(String(localized: "settings.downloads")) {
-                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.selectableCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.quality"), selection: settingBinding(\.quality)) { ForEach(UserSettings.Quality.allCases, id: \.self) { Text(L10n.value("settings.quality.\($0.rawValue)")).tag($0) } }
                     Picker(String(localized: "settings.saveMode"), selection: settingBinding(\.saveMode)) { ForEach(UserSettings.SaveMode.allCases, id: \.self) { Text(L10n.value("settings.saveMode.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.photos"), isOn: settingBinding(\.saveToPhotos))
                     Toggle(String(localized: "settings.cellular"), isOn: settingBinding(\.allowCellular))
@@ -25,6 +25,7 @@ struct SettingsView: View {
                 }
                 Section(String(localized: "settings.appearance")) {
                     Picker(String(localized: "settings.appearance"), selection: settingBinding(\.appearance)) { ForEach(UserSettings.Appearance.allCases, id: \.self) { Text(L10n.value("settings.appearance.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.language"), selection: settingBinding(\.language)) { ForEach(UserSettings.AppLanguage.allCases, id: \.self) { Text(L10n.value("settings.language.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.reduceMotion"), isOn: settingBinding(\.reduceMotion))
                 }
                 Section(String(localized: "settings.privacy")) {
@@ -42,6 +43,9 @@ struct SettingsView: View {
                     Button(role: .destructive) { showDeleteLibraryConfirmation = true } label: {
                         Label(String(localized: "settings.deleteLibrary"), systemImage: "trash")
                     }
+                }
+                Section(String(localized: "settings.about")) {
+                    LabeledContent(String(localized: "settings.version"), value: versionDescription)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -80,6 +84,12 @@ struct SettingsView: View {
         } catch {
             appState.lastError = UserVisibleError(message: error.localizedDescription)
         }
+    }
+
+    private var versionDescription: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "\(version) (\(build))"
     }
 
     private func deleteLibrary() async {

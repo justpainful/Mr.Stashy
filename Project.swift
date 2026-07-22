@@ -26,6 +26,7 @@ let project = Project(
             "TARGETED_DEVICE_FAMILY": "1,2",
             "DEVELOPMENT_TEAM": "",
             "CODE_SIGN_STYLE": "Automatic",
+            "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "",
             "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES"
         ]
     ),

@@ -11,9 +11,8 @@ final class ShareViewController: SLComposeServiceViewController {
             guard let extensionContext,
                   let deepLink = URL(string: "stashy://catch")
             else { return }
-            extensionContext.open(deepLink) { _ in
-                extensionContext.completeRequest(returningItems: [], completionHandler: nil)
-            }
+            _ = await extensionContext.open(deepLink)
+            extensionContext.completeRequest(returningItems: [], completionHandler: nil)
         }
     }
 

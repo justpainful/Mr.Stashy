@@ -39,6 +39,8 @@
 "results.saveFull" = "حفظ المنشور";
 "results.saveMedia" = "حفظ الوسائط";
 "results.textCard" = "بطاقة نصية";
+"results.quality.title" = "اختر جودة التنزيل";
+"results.quality.message" = "الأصلية تحفظ أفضل نسخة يتيحها المصدر، وتوفير البيانات يختار أصغر نسخة متاحة.";
 
 "media.photo" = "صورة";
 "media.video" = "فيديو";
@@ -133,6 +135,12 @@
 "settings.appearance.system" = "النظام";
 "settings.appearance.light" = "فاتح";
 "settings.appearance.dark" = "داكن";
+"settings.language" = "اللغة";
+"settings.language.system" = "لغة النظام";
+"settings.language.english" = "الإنجليزية";
+"settings.language.arabic" = "العربية";
+"settings.about" = "حول التطبيق";
+"settings.version" = "الإصدار";
 "settings.reduceMotion" = "تقليل الحركة";
 "settings.privacy" = "الخصوصية";
 "settings.privacy.body" = "ستاشي محلي أولًا؛ لا حساب ولا تحليلات ولا مكتبة سحابية.";

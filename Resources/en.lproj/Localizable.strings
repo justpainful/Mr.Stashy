@@ -39,6 +39,8 @@
 "results.saveFull" = "Save post";
 "results.saveMedia" = "Save media";
 "results.textCard" = "Text card";
+"results.quality.title" = "Choose download quality";
+"results.quality.message" = "Original keeps the best source-exposed variant. Data Saver chooses the smallest available variant.";
 
 "media.photo" = "Photo";
 "media.video" = "Video";
@@ -133,6 +135,12 @@
 "settings.appearance.system" = "System";
 "settings.appearance.light" = "Light";
 "settings.appearance.dark" = "Dark";
+"settings.language" = "Language";
+"settings.language.system" = "System language";
+"settings.language.english" = "English";
+"settings.language.arabic" = "Arabic";
+"settings.about" = "About";
+"settings.version" = "Version";
 "settings.reduceMotion" = "Reduce motion";
 "settings.privacy" = "Privacy";
 "settings.privacy.body" = "Stashy is local-first. It has no account, analytics, or cloud library.";

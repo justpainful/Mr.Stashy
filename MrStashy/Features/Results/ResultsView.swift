@@ -5,6 +5,7 @@ struct ResultsView: View {
     let post: ResolvedPost
     @State private var selectedMediaIDs: Set<UUID>
     @State private var showTextCard = false
+    @State private var pendingSaveMode: QueueItem.SaveMode?
 
     init(post: ResolvedPost) {
         self.post = post
@@ -31,6 +32,16 @@ struct ResultsView: View {
         }
         .navigationTitle(String(localized: "results.title"))
         .sheet(isPresented: $showTextCard) { TextCardComposer(post: post) }
+        .confirmationDialog(String(localized: "results.quality.title"), isPresented: Binding(
+            get: { pendingSaveMode != nil },
+            set: { if !$0 { pendingSaveMode = nil } }
+        )) {
+            Button(String(localized: "settings.quality.original")) { enqueuePending(quality: .original) }
+            Button(String(localized: "settings.quality.dataSaver")) { enqueuePending(quality: .dataSaver) }
+            Button(String(localized: "action.cancel"), role: .cancel) { pendingSaveMode = nil }
+        } message: {
+            Text(String(localized: "results.quality.message"))
+        }
     }
 
     private var authorBlock: some View {
@@ -74,20 +85,56 @@ struct ResultsView: View {
 
     private var actionBar: some View {
         StashyGlassBar {
-            Button {
-                appState.enqueueFullPost(post, selectedIDs: selectedMediaIDs)
-            } label: { Label(String(localized: "results.saveFull"), systemImage: "archivebox") }
-            .buttonStyle(.glassProminent)
-            .disabled(selectedMediaIDs.isEmpty && !post.media.isEmpty)
-            .accessibilityIdentifier("results.saveFull")
-            Button {
-                appState.enqueueMediaOnly(post, selectedIDs: selectedMediaIDs)
-            } label: { Label(String(localized: "results.saveMedia"), systemImage: "arrow.down.to.line") }
-            .buttonStyle(.glass)
-            .disabled(selectedMediaIDs.isEmpty)
+            saveButtons
             Button { showTextCard = true } label: { Label(String(localized: "results.textCard"), systemImage: "text.badge.plus") }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("results.textCard")
+        }
+    }
+
+    @ViewBuilder private var saveButtons: some View {
+        if appState.settings.saveMode == .mediaOnly {
+            fullPostButton.buttonStyle(.glass)
+            mediaOnlyButton.buttonStyle(.glassProminent)
+        } else {
+            fullPostButton.buttonStyle(.glassProminent)
+            mediaOnlyButton.buttonStyle(.glass)
+        }
+    }
+
+    private var fullPostButton: some View {
+        Button { requestSave(.fullPost) } label: {
+            Label(String(localized: "results.saveFull"), systemImage: "archivebox")
+        }
+        .disabled(selectedMediaIDs.isEmpty && !post.media.isEmpty)
+        .accessibilityIdentifier("results.saveFull")
+    }
+
+    private var mediaOnlyButton: some View {
+        Button { requestSave(.mediaOnly) } label: {
+            Label(String(localized: "results.saveMedia"), systemImage: "arrow.down.to.line")
+        }
+        .disabled(selectedMediaIDs.isEmpty)
+    }
+
+    private func requestSave(_ mode: QueueItem.SaveMode) {
+        if appState.settings.quality == .askEveryTime {
+            pendingSaveMode = mode
+        } else {
+            enqueue(mode: mode, quality: appState.settings.quality)
+        }
+    }
+
+    private func enqueuePending(quality: UserSettings.Quality) {
+        guard let mode = pendingSaveMode else { return }
+        pendingSaveMode = nil
+        enqueue(mode: mode, quality: quality)
+    }
+
+    private func enqueue(mode: QueueItem.SaveMode, quality: UserSettings.Quality) {
+        switch mode {
+        case .fullPost: appState.enqueueFullPost(post, selectedIDs: selectedMediaIDs, quality: quality)
+        case .mediaOnly: appState.enqueueMediaOnly(post, selectedIDs: selectedMediaIDs, quality: quality)
         }
     }
 }
