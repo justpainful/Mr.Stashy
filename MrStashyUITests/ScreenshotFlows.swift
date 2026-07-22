@@ -77,7 +77,7 @@ final class ScreenshotFlows: XCTestCase {
         let screenshot = app.screenshot()
         let data = screenshot.pngRepresentation
         XCTAssertNoThrow(try data.write(to: destination, options: .atomic), "Could not write \(name)")
-        let attachment = XCTAttachment(image: screenshot)
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
