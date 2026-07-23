@@ -14,20 +14,20 @@ enum StashyTheme {
 
     static func accent(for theme: UserSettings.Theme) -> Color {
         switch theme {
-        case .studio: lavender
-        case .citrus: Color(red: 0.84, green: 0.20, blue: 0.18)
-        case .ember: Color(red: 0.80, green: 0.16, blue: 0.31)
-        case .ocean: Color(red: 0.10, green: 0.43, blue: 0.72)
+        case .studio: return lavender
+        case .citrus: return Color(red: 0.84, green: 0.20, blue: 0.18)
+        case .ember: return Color(red: 0.80, green: 0.16, blue: 0.31)
+        case .ocean: return Color(red: 0.10, green: 0.43, blue: 0.72)
         }
     }
 
     static func background(for theme: UserSettings.Theme, colorScheme: ColorScheme) -> Color {
         guard colorScheme != .dark else { return darkSurface }
         switch theme {
-        case .studio: cream
-        case .citrus: Color(red: 1.00, green: 0.95, blue: 0.72)
-        case .ember: Color(red: 1.00, green: 0.91, blue: 0.88)
-        case .ocean: Color(red: 0.88, green: 0.95, blue: 0.98)
+        case .studio: return cream
+        case .citrus: return Color(red: 1.00, green: 0.95, blue: 0.72)
+        case .ember: return Color(red: 1.00, green: 0.91, blue: 0.88)
+        case .ocean: return Color(red: 0.88, green: 0.95, blue: 0.98)
         }
     }
 }
