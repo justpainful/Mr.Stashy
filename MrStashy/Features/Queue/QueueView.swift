@@ -7,9 +7,16 @@ struct QueueView: View {
         ZStack {
             StashyBackground()
             if appState.queueItems.isEmpty {
-                ContentUnavailableView {
+                VStack(spacing: 14) {
+                    StashyIllustration(name: "queueEmpty", maxHeight: 230)
                     Label(String(localized: "queue.empty.title"), systemImage: "arrow.down.circle")
-                } description: { Text(String(localized: "queue.empty.body")) }
+                        .font(.title3.weight(.bold))
+                    Text(String(localized: "queue.empty.body"))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
             } else {
                 List(appState.queueItems) { item in
                     QueueRow(item: item)

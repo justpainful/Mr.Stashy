@@ -12,6 +12,43 @@ enum StashyTheme {
     static let surface = Color(uiColor: .secondarySystemBackground)
 }
 
+struct StashyIllustration: View {
+    let name: String
+    var maxHeight: CGFloat = 220
+
+    var body: some View {
+        Image(name)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: maxHeight)
+            .accessibilityHidden(true)
+    }
+}
+
+struct SourceStyle {
+    let accent: Color
+    let symbol: String
+}
+
+extension Platform {
+    var sourceStyle: SourceStyle {
+        switch self {
+        case .tikTok: SourceStyle(accent: StashyTheme.aqua, symbol: "music.note")
+        case .instagram: SourceStyle(accent: StashyTheme.pink, symbol: "camera")
+        case .x: SourceStyle(accent: Color(red: 0.11, green: 0.61, blue: 0.96), symbol: "at")
+        case .pinterest: SourceStyle(accent: Color(red: 0.82, green: 0.15, blue: 0.19), symbol: "pin")
+        case .snapchat: SourceStyle(accent: StashyTheme.butter, symbol: "bolt")
+        case .kick: SourceStyle(accent: Color(red: 0.24, green: 0.74, blue: 0.38), symbol: "play.rectangle")
+        case .threads: SourceStyle(accent: StashyTheme.charcoal, symbol: "at")
+        case .tumblr: SourceStyle(accent: Color(red: 0.16, green: 0.26, blue: 0.36), symbol: "text.bubble")
+        case .imgur: SourceStyle(accent: Color(red: 0.15, green: 0.68, blue: 0.43), symbol: "photo.on.rectangle")
+        case .youTube: SourceStyle(accent: Color(red: 0.91, green: 0.10, blue: 0.12), symbol: "play.rectangle.fill")
+        case .discord: SourceStyle(accent: StashyTheme.lavender, symbol: "bubble.left.and.bubble.right")
+        case .directMedia: SourceStyle(accent: StashyTheme.aqua, symbol: "link")
+        }
+    }
+}
+
 struct StashyBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {

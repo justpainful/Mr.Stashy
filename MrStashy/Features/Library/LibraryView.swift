@@ -9,8 +9,13 @@ struct LibraryView: View {
     @State private var entries: [ArchivedPostSummary] = []
     @State private var mediaEntries: [ArchivedMediaSummary] = []
     @State private var archivePendingDeletion: ArchivedPostSummary?
+    @State private var presentedArchive: ArchiveRoute?
 
     private enum LibraryMode: String, CaseIterable, Identifiable { case posts, media; var id: String { rawValue } }
+    private struct ArchiveRoute: Identifiable {
+        let archiveID: UUID
+        var id: UUID { archiveID }
+    }
 
     var body: some View {
         ZStack {
@@ -46,6 +51,13 @@ struct LibraryView: View {
             Button(String(localized: "action.cancel"), role: .cancel) { archivePendingDeletion = nil }
         } message: {
             Text(String(localized: "library.delete.message"))
+        }
+        .sheet(item: $presentedArchive) { route in
+            NavigationStack {
+                LivingPostView(archiveID: route.archiveID)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
     }
 
@@ -84,21 +96,28 @@ struct LibraryView: View {
 
     @ViewBuilder private var content: some View {
         if (mode == .posts && filteredEntries.isEmpty) || (mode == .media && filteredMediaEntries.isEmpty) {
-            ContentUnavailableView {
+            VStack(spacing: 14) {
+                StashyIllustration(name: "libraryEmpty", maxHeight: 220)
                 Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
-            } description: {
+                    .font(.title3.weight(.bold))
                 Text(String(localized: "library.empty.body"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
         } else {
             List {
                 if mode == .posts {
                     ForEach(filteredEntries) { item in
-                        NavigationLink { LivingPostView(archiveID: item.id) } label: { PostRow(summary: item) }
+                        Button { presentedArchive = ArchiveRoute(archiveID: item.id) } label: { PostRow(summary: item) }
+                            .buttonStyle(.plain)
                             .swipeActions { deleteAction(item) }
                     }
                 } else {
                     ForEach(filteredMediaEntries) { item in
-                        NavigationLink { LivingPostView(archiveID: item.archiveID) } label: { MediaRow(item: item) }
+                        Button { presentedArchive = ArchiveRoute(archiveID: item.archiveID) } label: { MediaRow(item: item) }
+                            .buttonStyle(.plain)
                             .swipeActions { deleteAction(ArchivedPostSummary(id: item.archiveID, platform: item.platform, author: item.author, text: "", mediaCount: 1, savedAt: item.savedAt, localFolderName: item.archiveID.uuidString)) }
                     }
                 }

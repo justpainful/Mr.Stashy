@@ -88,9 +88,12 @@ struct CatchView: View {
             Text(String(localized: "catch.recent"))
                 .font(.headline)
             if appState.libraryPosts.isEmpty {
+                StashyIllustration(name: "catchEmpty", maxHeight: 176)
+                    .padding(.top, 4)
                 Text(String(localized: "catch.recent.empty"))
                     .font(.subheadline)
                     .foregroundStyle(StashyTheme.charcoal.opacity(0.65))
+                    .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 ForEach(appState.libraryPosts.prefix(3)) { item in
                     Label(item.author, systemImage: item.platform == .directMedia ? "link" : "archivebox")
