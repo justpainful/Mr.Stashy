@@ -2,6 +2,11 @@ name: Record Stashy demo tour
 
 on:
   workflow_dispatch:
+  # Lets the feature branch produce its first delivery artifact before this workflow reaches main.
+  push:
+    branches: [codex/build-stashy-v1]
+    paths:
+      - .github/workflows/demo-tour.yml
 
 permissions:
   contents: read
