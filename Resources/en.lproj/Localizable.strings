@@ -23,6 +23,11 @@
 "catch.urlPlaceholder" = "https://…";
 "catch.paste" = "Paste";
 "catch.resolve" = "Inspect link";
+"catch.sources" = "Choose a source";
+"catch.sourcePaste.title" = "Add a link";
+"catch.sourcePaste.body" = "Paste a public %@ link and Stashy will inspect the available media.";
+"catch.sourcePaste.clipboard" = "Paste from Clipboard";
+"catch.sourcePaste.inspect" = "Inspect link";
 "catch.supportedPlatforms" = "Platform support status";
 "catch.failed.title" = "That link could not be opened";
 "catch.recent" = "Recent saves";

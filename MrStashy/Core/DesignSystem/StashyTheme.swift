@@ -25,12 +25,48 @@ struct StashyIllustration: View {
     }
 }
 
+/// A local source badge. Brand artwork is bundled with the app so the capture flow
+/// remains useful before a network request is made.
+struct PlatformIcon: View {
+    let platform: Platform
+    var size: CGFloat = 32
+
+    var body: some View {
+        Group {
+            if platform == .directMedia {
+                Image(systemName: platform.sourceStyle.symbol)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(size * 0.22)
+                    .foregroundStyle(platform.sourceStyle.accent)
+                    .background(platform.sourceStyle.accent.opacity(0.16))
+            } else {
+                Image(platform.rawValue)
+                    .resizable()
+                    .scaledToFill()
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .stroke(.primary.opacity(0.10), lineWidth: 0.5)
+        }
+        .accessibilityLabel(Text(L10n.value(platform.titleKey)))
+    }
+}
+
 struct SourceStyle {
     let accent: Color
     let symbol: String
 }
 
 extension Platform {
+    static let quickCapturePlatforms: [Platform] = [
+        .tikTok, .instagram, .x, .youTube, .pinterest, .snapchat,
+        .kick, .threads, .tumblr, .imgur, .discord
+    ]
+
     var sourceStyle: SourceStyle {
         switch self {
         case .tikTok: SourceStyle(accent: StashyTheme.aqua, symbol: "music.note")

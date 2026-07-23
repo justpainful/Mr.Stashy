@@ -44,7 +44,8 @@ private struct QueueRow: View {
     let item: QueueItem
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            HStack {
+            HStack(spacing: 10) {
+                PlatformIcon(platform: item.post.platform, size: 30)
                 Text(item.post.author.displayName).font(.headline)
                 Spacer()
                 Text(stageText).font(.caption.weight(.semibold)).foregroundStyle(stageColor)

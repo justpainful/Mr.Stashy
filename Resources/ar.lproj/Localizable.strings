@@ -23,6 +23,11 @@
 "catch.urlPlaceholder" = "https://…";
 "catch.paste" = "لصق";
 "catch.resolve" = "فحص الرابط";
+"catch.sources" = "اختر المصدر";
+"catch.sourcePaste.title" = "إضافة رابط";
+"catch.sourcePaste.body" = "الصق رابطًا عامًا من %@ وسيفحص ستاشي الوسائط المتاحة.";
+"catch.sourcePaste.clipboard" = "لصق من الحافظة";
+"catch.sourcePaste.inspect" = "فحص الرابط";
 "catch.supportedPlatforms" = "حالة دعم المنصات";
 "catch.failed.title" = "تعذر فتح الرابط";
 "catch.recent" = "آخر المحفوظات";

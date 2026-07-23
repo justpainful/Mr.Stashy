@@ -108,7 +108,8 @@ struct PlatformDiagnosticsSheet: View {
     var body: some View {
         NavigationStack {
             List(PlatformCapabilityRegistry.all) { capability in
-                HStack {
+                HStack(spacing: 12) {
+                    PlatformIcon(platform: capability.platform, size: 30)
                     VStack(alignment: .leading) {
                         Text(L10n.value(capability.platform.titleKey)).font(.headline)
                         Text(capability.evidence).font(.caption).foregroundStyle(.secondary)

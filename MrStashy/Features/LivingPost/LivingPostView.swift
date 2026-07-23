@@ -69,7 +69,10 @@ struct LivingPostView: View {
                     if let username = manifest.author.username {
                         Text("@\(username)").font(.subheadline).foregroundStyle(.secondary)
                     }
-                    Label(L10n.value(manifest.platform.titleKey), systemImage: style.symbol)
+                    HStack(spacing: 5) {
+                        PlatformIcon(platform: manifest.platform, size: 18)
+                        Text(L10n.value(manifest.platform.titleKey))
+                    }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(style.accent)
                 }

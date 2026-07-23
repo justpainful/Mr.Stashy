@@ -64,8 +64,11 @@ struct ResultsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName).font(.headline)
                 if let username = post.author.username { Text("@\(username)").font(.subheadline).foregroundStyle(.secondary) }
-                Label(L10n.value(post.platform.titleKey), systemImage: "link")
-                    .font(.caption.weight(.medium))
+                HStack(spacing: 5) {
+                    PlatformIcon(platform: post.platform, size: 17)
+                    Text(L10n.value(post.platform.titleKey))
+                }
+                .font(.caption.weight(.medium))
             }
             Spacer()
             if let date = post.createdAt { Text(date, style: .date).font(.caption).foregroundStyle(.secondary) }

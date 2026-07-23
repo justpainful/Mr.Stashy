@@ -4,6 +4,7 @@ struct CatchView: View {
     @Environment(AppState.self) private var appState
     @State private var urlText = ""
     @State private var showCapabilities = false
+    @State private var selectedSource: Platform?
 
     var body: some View {
         ZStack {
@@ -23,6 +24,9 @@ struct CatchView: View {
             if let pending = appState.pendingLink { urlText = pending.absoluteString; appState.pendingLink = nil }
         }
         .sheet(isPresented: $showCapabilities) { PlatformDiagnosticsSheet() }
+        .sheet(item: $selectedSource) { platform in
+            PlatformPasteSheet(platform: platform, urlText: $urlText)
+        }
     }
 
     private var captureForm: some View {
@@ -36,6 +40,7 @@ struct CatchView: View {
                 .padding(14)
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(StashyTheme.charcoal.opacity(0.2), lineWidth: 1))
                 .accessibilityIdentifier("catch.url")
+            sourcePicker
             StashyGlassBar {
                 Button {
                     Task { @MainActor in
@@ -54,6 +59,32 @@ struct CatchView: View {
         }
         .padding(18)
         .overlay(RoundedRectangle(cornerRadius: 24).stroke(StashyTheme.charcoal.opacity(0.14), lineWidth: 1))
+    }
+
+    private var sourcePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "catch.sources"))
+                .font(.subheadline.weight(.semibold))
+            ScrollView(.horizontal) {
+                HStack(spacing: 12) {
+                    ForEach(Platform.quickCapturePlatforms) { platform in
+                        Button { selectedSource = platform } label: {
+                            VStack(spacing: 5) {
+                                PlatformIcon(platform: platform, size: 42)
+                                Text(L10n.value(platform.titleKey))
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                            }
+                            .frame(width: 54)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("catch.source.\(platform.rawValue)")
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+        }
     }
 
     @ViewBuilder private var stateSection: some View {
@@ -96,10 +127,76 @@ struct CatchView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 ForEach(appState.libraryPosts.prefix(3)) { item in
-                    Label(item.author, systemImage: item.platform == .directMedia ? "link" : "archivebox")
-                        .font(.subheadline)
+                    HStack(spacing: 8) {
+                        PlatformIcon(platform: item.platform, size: 24)
+                        Text(item.author)
+                    }
+                    .font(.subheadline)
                 }
             }
+        }
+    }
+}
+
+private struct PlatformPasteSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let platform: Platform
+    @Binding var urlText: String
+    @State private var draft = ""
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: 14) {
+                    PlatformIcon(platform: platform, size: 54)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L10n.value(platform.titleKey)).font(.title3.weight(.bold))
+                        Text(L10n.format("catch.sourcePaste.body", L10n.value(platform.titleKey)))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                TextField(String(localized: "catch.urlPlaceholder"), text: $draft, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .padding(14)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(StashyTheme.charcoal.opacity(0.2), lineWidth: 1))
+                Button { pasteClipboard() } label: {
+                    Label(String(localized: "catch.sourcePaste.clipboard"), systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(.glass)
+                Spacer()
+                Button {
+                    let link = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    urlText = link
+                    dismiss()
+                    Task { await appState.resolve(link) }
+                } label: {
+                    Label(String(localized: "catch.sourcePaste.inspect"), systemImage: "sparkle.magnifyingglass")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(20)
+            .navigationTitle(String(localized: "catch.sourcePaste.title"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "action.cancel")) { dismiss() }
+                }
+            }
+            .task { pasteClipboard() }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func pasteClipboard() {
+        if let url = UIPasteboard.general.url {
+            draft = url.absoluteString
+        } else if let text = UIPasteboard.general.string {
+            draft = text
         }
     }
 }

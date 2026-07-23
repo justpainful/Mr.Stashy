@@ -174,8 +174,7 @@ private struct PostRow: View {
     let summary: ArchivedPostSummary
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: summary.platform == .directMedia ? "link" : "archivebox")
-                .font(.title2).foregroundStyle(StashyTheme.lavender)
+            PlatformIcon(platform: summary.platform, size: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(summary.author).font(.headline)
                 Text(summary.text.isEmpty ? String(localized: "library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary)
@@ -190,7 +189,8 @@ private struct PostRow: View {
 private struct MediaRow: View {
     let item: ArchivedMediaSummary
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
+            PlatformIcon(platform: item.platform, size: 30)
             Image(systemName: item.type.systemImage).foregroundStyle(StashyTheme.aqua)
             VStack(alignment: .leading) {
                 Text(item.author).font(.headline)
