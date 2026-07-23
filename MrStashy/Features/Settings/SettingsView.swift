@@ -25,6 +25,7 @@ struct SettingsView: View {
                 }
                 Section(String(localized: "settings.appearance")) {
                     Picker(String(localized: "settings.appearance"), selection: settingBinding(\.appearance)) { ForEach(UserSettings.Appearance.allCases, id: \.self) { Text(L10n.value("settings.appearance.\($0.rawValue)")).tag($0) } }
+                    Picker(String(localized: "settings.theme"), selection: settingBinding(\.theme)) { ForEach(UserSettings.Theme.allCases, id: \.self) { Text(L10n.value("settings.theme.\($0.rawValue)")).tag($0) } }
                     Picker(String(localized: "settings.language"), selection: settingBinding(\.language)) { ForEach(UserSettings.AppLanguage.allCases, id: \.self) { Text(L10n.value("settings.language.\($0.rawValue)")).tag($0) } }
                     Toggle(String(localized: "settings.reduceMotion"), isOn: settingBinding(\.reduceMotion))
                 }

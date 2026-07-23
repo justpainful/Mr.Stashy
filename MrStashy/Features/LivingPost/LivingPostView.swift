@@ -33,11 +33,6 @@ struct LivingPostView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 sourcePostCard(manifest)
-                LazyVStack(spacing: 12) {
-                    ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                        LocalMediaCard(archiveID: archiveID, record: media, style: manifest.platform.sourceStyle)
-                    }
-                }
                 StashyGlassBar {
                     Link(destination: manifest.canonicalURL) { Label(String(localized: "livingPost.openOriginal"), systemImage: "safari") }.buttonStyle(.glass)
                     Button { UIPasteboard.general.url = manifest.canonicalURL } label: { Label(String(localized: "livingPost.copySource"), systemImage: "doc.on.doc") }.buttonStyle(.glass)
@@ -92,6 +87,9 @@ struct LivingPostView: View {
                     .textSelection(.enabled)
             }
             if let quote = manifest.quotedPost { QuotedPostView(quote: quote) }
+            ForEach(manifest.orderedMedia, id: \.mediaID) { media in
+                LocalMediaCard(archiveID: archiveID, record: media, style: style, embedded: true)
+            }
         }
         .padding(16)
         .background(style.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 24))
@@ -132,6 +130,7 @@ private struct LocalMediaCard: View {
     let archiveID: UUID
     let record: ArchivedMediaRecord
     let style: SourceStyle
+    var embedded = false
     @State private var localURL: URL?
     @State private var savedToPhotos = false
 
@@ -163,9 +162,13 @@ private struct LocalMediaCard: View {
                 .buttonStyle(.glass)
             }
         }
-        .padding(14)
-        .background(style.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(style.accent.opacity(0.28), lineWidth: 1))
+        .padding(embedded ? 0 : 14)
+        .background {
+            if !embedded { RoundedRectangle(cornerRadius: 18).fill(style.accent.opacity(0.08)) }
+        }
+        .overlay {
+            if !embedded { RoundedRectangle(cornerRadius: 18).stroke(style.accent.opacity(0.28), lineWidth: 1) }
+        }
         .task(id: record.localFilename) {
             guard let filename = record.localFilename else { return }
             localURL = await appState.archiveStore.localMediaURL(archiveID: archiveID, filename: filename)

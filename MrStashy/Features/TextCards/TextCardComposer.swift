@@ -48,7 +48,12 @@ struct TextCardComposer: View {
                 .padding(20)
             }
             .navigationTitle(String(localized: "textCard.title"))
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(String(localized: "action.done")) { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel(Text(String(localized: "action.done")))
+                }
+            }
         }
         .task { saveToPhotos = appState.settings.saveToPhotos }
     }
@@ -165,9 +170,9 @@ struct TextCardCanvas: View {
 
     private var fontSizes: [CGFloat] {
         switch style {
-        case .compact: [34, 30, 26, 22]
-        case .neutral: [46, 40, 34, 28]
-        case .editorial: [52, 44, 36, 28]
+        case .compact: [32, 29, 26, 23]
+        case .neutral: [40, 35, 30, 26]
+        case .editorial: [44, 38, 32, 27]
         }
     }
 

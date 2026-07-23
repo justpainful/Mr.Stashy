@@ -12,7 +12,7 @@ struct StashyRootView: View {
                 OnboardingView(onComplete: appState.completeOnboarding)
             }
         }
-        .tint(StashyTheme.green)
+        .tint(StashyTheme.accent(for: appState.settings.theme))
         .preferredColorScheme(appState.settings.appearance.colorScheme)
         .environment(\.locale, appState.settings.language.locale)
         .transaction { transaction in

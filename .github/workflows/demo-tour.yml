@@ -7,7 +7,9 @@ on:
     branches: [codex/build-stashy-v1]
     paths:
       - .github/workflows/demo-tour.yml
+      - MrStashy/**
       - MrStashyUITests/**
+      - Resources/**
 
 permissions:
   contents: read
@@ -43,7 +45,7 @@ jobs:
           set -euo pipefail
           device="$(bash scripts/boot_simulator.sh)"
           mkdir -p Artifacts/Demo Artifacts/Screenshots Artifacts/Logs
-          recording="$(pwd -P)/Artifacts/Demo/Stashy-demo-tour.mov"
+          recording="$(pwd -P)/Artifacts/Demo/Stashy-demo-tour.mp4"
           xcrun simctl io "$device" recordVideo --codec=h264 "$recording" &
           recorder_pid=$!
           stop_recording() {
@@ -67,13 +69,13 @@ jobs:
           mkdir -p Artifacts/Delivery
           cp Artifacts/MrStashy-unsigned.ipa Artifacts/Delivery/Stashy-unsigned.ipa
           cp Artifacts/MrStashy-dSYM.zip Artifacts/Delivery/Stashy-dSYM.zip
-          cp Artifacts/Demo/Stashy-demo-tour.mov Artifacts/Delivery/Stashy-demo-tour.mov
+          cp Artifacts/Demo/Stashy-demo-tour.mp4 Artifacts/Delivery/Stashy-demo-tour.mp4
           cp -R Artifacts/Screenshots Artifacts/Delivery/Screenshots
           cat > Artifacts/Delivery/README.txt <<'EOF'
           Stashy — ملف التسليم
 
           - Stashy-unsigned.ipa: حزمة iOS غير موقعة للتثبيت الجانبي.
-          - Stashy-demo-tour.mov: تسجيل فعلي من محاكي iOS لجولة التطبيق الآلية.
+          - Stashy-demo-tour.mp4: تسجيل فعلي متوافق بصيغة H.264 لجولة التطبيق الآلية.
           - Screenshots/: لقطات منفصلة من المسار نفسه.
           - Stashy-dSYM.zip: رموز التصحيح لبناء الإصدار.
 

@@ -123,20 +123,28 @@ final class AppState {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--ui-testing") else { return }
         if arguments.contains("--ui-dark") { settings.appearance = .dark }
-        if libraryPosts.isEmpty, let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
-            _ = try? await archiveStore.saveTextCard(pngData: data, sourcePost: Self.screenshotPost)
+        // Every screenshot launch is isolated. This prevents an English test collection
+        // from leaking into the subsequent Arabic capture.
+        libraryOrganization = LibraryOrganization()
+        try? await organizationStore.save(libraryOrganization)
+        let fixture = Self.screenshotPost(isArabic: Locale.preferredLanguages.first?.hasPrefix("ar") == true)
+        try? await archiveStore.deleteAllArchives()
+        libraryPosts = []
+        if let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
+            _ = try? await archiveStore.saveTextCard(pngData: data, sourcePost: fixture)
             libraryPosts = await archiveStore.loadSummaries()
         }
-        if arguments.contains("--ui-results-fixture") { catchState = .ready(Self.screenshotPost) }
+        if arguments.contains("--ui-results-fixture") { catchState = .ready(fixture) }
     }
 
-    private static let screenshotPost = ResolvedPost(
+    private static func screenshotPost(isArabic: Bool) -> ResolvedPost {
+        ResolvedPost(
         id: UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!,
         platform: .directMedia,
         originalURL: URL(string: "https://example.invalid/screenshot-post")!,
         canonicalURL: URL(string: "https://example.invalid/screenshot-post")!,
-        author: ResolvedAuthor(platformID: nil, displayName: "Sample archive", username: "sample", avatarURL: nil, profileURL: nil, badges: []),
-        text: "A local screenshot fixture with a photo, video, and GIF in original order.",
+        author: ResolvedAuthor(platformID: nil, displayName: isArabic ? "أرشيف تجريبي" : "Sample archive", username: isArabic ? "تجربة" : "sample", avatarURL: nil, profileURL: nil, badges: []),
+        text: isArabic ? "منشور تجريبي يحفظ صورة وفيديو وصورة متحركة بالترتيب الأصلي." : "A local screenshot fixture with a photo, video, and GIF in original order.",
         createdAt: Date(timeIntervalSince1970: 1_700_000_000),
         fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
         quotedPost: nil,
@@ -147,7 +155,8 @@ final class AppState {
         ],
         resolverVersion: "screenshot-fixture.v1",
         warnings: []
-    )
+        )
+    }
 
     private static func screenshotMedia(order: Int, type: MediaType, url: String) -> ResolvedMedia {
         let variant = MediaVariant(

@@ -119,7 +119,7 @@ struct CatchView: View {
             Text(String(localized: "catch.recent"))
                 .font(.headline)
             if appState.libraryPosts.isEmpty {
-                StashyIllustration(name: "catchEmpty", maxHeight: 176)
+                StashyIllustration(name: "stashyCatch", maxHeight: 176)
                     .padding(.top, 4)
                 Text(String(localized: "catch.recent.empty"))
                     .font(.subheadline)

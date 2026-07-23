@@ -8,7 +8,7 @@ struct QueueView: View {
             StashyBackground()
             if appState.queueItems.isEmpty {
                 VStack(spacing: 14) {
-                    StashyIllustration(name: "queueEmpty", maxHeight: 230)
+                    StashyIllustration(name: "stashyQueue", maxHeight: 230)
                     Label(String(localized: "queue.empty.title"), systemImage: "arrow.down.circle")
                         .font(.title3.weight(.bold))
                     Text(String(localized: "queue.empty.body"))

@@ -150,6 +150,11 @@
 "settings.appearance.system" = "System";
 "settings.appearance.light" = "Light";
 "settings.appearance.dark" = "Dark";
+"settings.theme" = "Color theme";
+"settings.theme.studio" = "Studio";
+"settings.theme.citrus" = "Citrus";
+"settings.theme.ember" = "Ember";
+"settings.theme.ocean" = "Ocean";
 "settings.language" = "Language";
 "settings.language.system" = "System language";
 "settings.language.english" = "English";

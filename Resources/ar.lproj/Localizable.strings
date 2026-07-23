@@ -150,6 +150,11 @@
 "settings.appearance.system" = "النظام";
 "settings.appearance.light" = "فاتح";
 "settings.appearance.dark" = "داكن";
+"settings.theme" = "ألوان التطبيق";
+"settings.theme.studio" = "استديو";
+"settings.theme.citrus" = "حمضي";
+"settings.theme.ember" = "جمر";
+"settings.theme.ocean" = "محيط";
 "settings.language" = "اللغة";
 "settings.language.system" = "لغة النظام";
 "settings.language.english" = "الإنجليزية";

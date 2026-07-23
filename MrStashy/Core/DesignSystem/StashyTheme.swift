@@ -11,6 +11,25 @@ enum StashyTheme {
     static let green = Color(red: 0.39, green: 0.31, blue: 0.76)
     static let darkSurface = Color(red: 0.10, green: 0.09, blue: 0.14)
     static let surface = Color(uiColor: .secondarySystemBackground)
+
+    static func accent(for theme: UserSettings.Theme) -> Color {
+        switch theme {
+        case .studio: lavender
+        case .citrus: Color(red: 0.84, green: 0.20, blue: 0.18)
+        case .ember: Color(red: 0.80, green: 0.16, blue: 0.31)
+        case .ocean: Color(red: 0.10, green: 0.43, blue: 0.72)
+        }
+    }
+
+    static func background(for theme: UserSettings.Theme, colorScheme: ColorScheme) -> Color {
+        guard colorScheme != .dark else { return darkSurface }
+        switch theme {
+        case .studio: cream
+        case .citrus: Color(red: 1.00, green: 0.95, blue: 0.72)
+        case .ember: Color(red: 1.00, green: 0.91, blue: 0.88)
+        case .ocean: Color(red: 0.88, green: 0.95, blue: 0.98)
+        }
+    }
 }
 
 struct StashyIllustration: View {
@@ -87,9 +106,10 @@ extension Platform {
 }
 
 struct StashyBackground: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
-        (colorScheme == .dark ? StashyTheme.darkSurface : StashyTheme.cream)
+        StashyTheme.background(for: appState.settings.theme, colorScheme: colorScheme)
             .ignoresSafeArea()
     }
 }

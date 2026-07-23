@@ -141,7 +141,7 @@ struct LibraryView: View {
     @ViewBuilder private var content: some View {
         if (mode == .posts && filteredEntries.isEmpty) || (mode == .media && filteredMediaEntries.isEmpty) {
             VStack(spacing: 14) {
-                StashyIllustration(name: "libraryEmpty", maxHeight: 220)
+                StashyIllustration(name: "stashyLibrary", maxHeight: 220)
                 Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
                     .font(.title3.weight(.bold))
                 Text(String(localized: "library.empty.body"))
@@ -171,6 +171,8 @@ struct LibraryView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(.clear)
         }
     }
 
@@ -286,32 +288,36 @@ private struct ScopeChip: View {
 }
 
 private struct PostRow: View {
+    @Environment(\.layoutDirection) private var layoutDirection
     let summary: ArchivedPostSummary
     var body: some View {
         HStack(spacing: 12) {
             PlatformIcon(platform: summary.platform, size: 36)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading, spacing: 4) {
                 Text(summary.author).font(.headline)
-                Text(summary.text.isEmpty ? String(localized: "library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary)
+                Text(summary.text.isEmpty ? String(localized: "library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
                 Text(L10n.format("library.mediaCount", Int64(summary.mediaCount)))
                     .font(.caption).foregroundStyle(StashyTheme.green)
             }
+            .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)
         }
         .padding(.vertical, 5)
     }
 }
 
 private struct MediaRow: View {
+    @Environment(\.layoutDirection) private var layoutDirection
     let item: ArchivedMediaSummary
     var body: some View {
         HStack(spacing: 10) {
             PlatformIcon(platform: item.platform, size: 30)
             Image(systemName: item.type.systemImage).foregroundStyle(StashyTheme.aqua)
-            VStack(alignment: .leading) {
+            VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading) {
                 Text(item.author).font(.headline)
                 Text(String(localized: "library.mediaBacklink"))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)
             Spacer()
             if let fileSize = item.fileSize {
                 Text(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)).font(.caption).foregroundStyle(.secondary)
