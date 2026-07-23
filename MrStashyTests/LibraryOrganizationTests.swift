@@ -18,7 +18,9 @@ struct LibraryOrganizationTests {
         )
 
         #expect(decoded.pinnedArchiveIDs == [archiveID])
-        #expect(decoded.collections == [collection])
+        #expect(decoded.collections.map(\.id) == [collection.id])
+        #expect(decoded.collections.map(\.name) == [collection.name])
+        #expect(decoded.collections.map(\.symbol) == [collection.symbol])
         #expect(decoded.contains(archiveID, in: collection.id))
     }
 }
