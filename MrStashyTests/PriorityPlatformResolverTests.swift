@@ -3,6 +3,27 @@ import Testing
 @testable import MrStashy
 
 struct PriorityPlatformResolverTests {
+    @Test(arguments: [Platform.pinterest, .snapchat, .kick, .threads, .tumblr, .imgur, .youTube])
+    func publicSourceAdaptersKeepPubliclyExposedMediaInPageOrder(platform: Platform) async throws {
+        let source = try #require(URL(string: sourceURL(for: platform)))
+        let client = FixtureResolverClient(html: """
+        <meta property="og:url" content="\(source.absoluteString)">
+        <meta property="og:site_name" content="\(platform.rawValue)">
+        <meta property="og:audio" content="https://cdn.example.com/first.mp3">
+        <meta property="og:video" content="https://cdn.example.com/second.mp4">
+        <meta property="og:image" content="https://cdn.example.com/third.gif">
+        """)
+        let request = ResolveRequest(originalURL: source, canonicalURL: source)
+        let resolver = PublicOpenGraphResolver(platform: platform, client: client)
+
+        let post = try await resolver.resolve(request)
+
+        #expect(resolver.canHandle(source))
+        #expect(post.platform == platform)
+        #expect(post.media.map(\.type) == [.audio, .video, .gif])
+        #expect(post.media.map(\.orderIndex) == [0, 1, 2])
+    }
+
     @Test(arguments: [Platform.tikTok, .instagram, .x])
     func priorityResolversPreserveSourceExposedMixedMediaOrder(platform: Platform) async throws {
         let source = try #require(URL(string: sourceURL(for: platform)))
@@ -107,6 +128,13 @@ struct PriorityPlatformResolverTests {
         case .tikTok: "https://www.tiktok.com/@stashy/video/1234567890"
         case .instagram: "https://www.instagram.com/p/public-fixture/"
         case .x: "https://x.com/stashy/status/1234567890"
+        case .pinterest: "https://www.pinterest.com/pin/public-fixture/"
+        case .snapchat: "https://www.snapchat.com/spotlight/public-fixture"
+        case .kick: "https://kick.com/stashy?clip=public-fixture"
+        case .threads: "https://www.threads.net/@stashy/post/public-fixture"
+        case .tumblr: "https://stashy.tumblr.com/post/1234567890/public-fixture"
+        case .imgur: "https://imgur.com/public-fixture"
+        case .youTube: "https://www.youtube.com/watch?v=public-fixture"
         default: "https://example.com"
         }
     }

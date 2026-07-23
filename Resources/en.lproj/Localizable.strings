@@ -54,6 +54,15 @@
 "media.selection" = "Select media";
 "media.unknownDimensions" = "Dimensions unavailable";
 
+"library.scope.all" = "All";
+"library.scope.pinned" = "Pinned";
+"library.pin" = "Pin";
+"library.unpin" = "Unpin";
+"library.collection.create" = "New collection";
+"library.collection.create.body" = "Keep related posts together on this device.";
+"library.collection.name" = "Collection name";
+"library.collection.add" = "Add to collection";
+
 "queue.empty.title" = "Nothing in the queue";
 "queue.empty.body" = "Saved posts and media transfers will show their progress here.";
 "queue.itemCount" = "%lld item(s)";

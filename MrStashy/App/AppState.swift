@@ -8,6 +8,7 @@ final class AppState {
     var catchState: CatchState = .idle
     var queueItems: [QueueItem] = []
     var libraryPosts: [ArchivedPostSummary] = []
+    var libraryOrganization = LibraryOrganization()
     var settings = UserSettings.load()
     var onboardingComplete = UserDefaults.standard.bool(forKey: "onboarding.complete")
     var pendingLinks: [URL] = []
@@ -27,6 +28,7 @@ final class AppState {
     private var transferSamples: [UUID: QueueTransferSample] = [:]
     private let pendingQueueStore = PendingQueueStore()
     private let downloadPermits = DownloadPermitPool()
+    private let organizationStore = LibraryOrganizationStore()
 
     let archiveStore = ArchiveStore()
     let resolverRegistry = ResolverRegistry()
@@ -34,6 +36,7 @@ final class AppState {
     func bootstrap() async {
         await archiveStore.bootstrap()
         libraryPosts = await archiveStore.loadSummaries()
+        libraryOrganization = await organizationStore.load()
 #if DEBUG
         await configureScreenshotFixturesIfNeeded()
 #endif
@@ -59,6 +62,52 @@ final class AppState {
             } ?? [])
         }
         appendPendingLinks(incoming)
+    }
+
+    func createCollection(named name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !libraryOrganization.collections.contains(where: { $0.name.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame })
+        else { return }
+        libraryOrganization.collections.append(StashCollection(name: trimmed))
+        await persistLibraryOrganization()
+    }
+
+    func togglePinned(archiveID: UUID) async {
+        if libraryOrganization.pinnedArchiveIDs.contains(archiveID) {
+            libraryOrganization.pinnedArchiveIDs.remove(archiveID)
+        } else {
+            libraryOrganization.pinnedArchiveIDs.insert(archiveID)
+        }
+        await persistLibraryOrganization()
+    }
+
+    func toggleMembership(archiveID: UUID, collectionID: UUID) async {
+        var members = libraryOrganization.archiveIDsByCollection[collectionID, default: []]
+        if members.contains(archiveID) {
+            members.remove(archiveID)
+        } else {
+            members.insert(archiveID)
+        }
+        libraryOrganization.archiveIDsByCollection[collectionID] = members
+        await persistLibraryOrganization()
+    }
+
+    func removeArchiveFromOrganization(_ archiveID: UUID) async {
+        libraryOrganization.pinnedArchiveIDs.remove(archiveID)
+        let collectionIDs = Array(libraryOrganization.archiveIDsByCollection.keys)
+        for collectionID in collectionIDs {
+            libraryOrganization.archiveIDsByCollection[collectionID]?.remove(archiveID)
+        }
+        await persistLibraryOrganization()
+    }
+
+    private func persistLibraryOrganization() async {
+        do {
+            try await organizationStore.save(libraryOrganization)
+        } catch {
+            lastError = UserVisibleError(message: error.localizedDescription)
+        }
     }
 
     private func appendPendingLinks(_ links: [URL]) {

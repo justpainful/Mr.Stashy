@@ -64,21 +64,22 @@ struct ResolverRegistry: Sendable {
     private let shortLinkExpander: any URLRedirectExpanding
 
     init(shortLinkExpander: any URLRedirectExpanding = PlatformShortLinkExpander()) {
-        // A resolver becomes reachable only once the generated capability matrix records a
-        // passing live contract. Modules may exist for development and deterministic tests,
-        // but they cannot make the product claim a platform is supported before that proof.
-        var verified: [any PlatformResolver] = [DirectMediaResolver()]
-        for capability in PlatformCapabilityRegistry.shipped {
-            switch capability.platform {
-            case .tikTok: verified.append(TikTokResolver())
-            case .instagram: verified.append(InstagramResolver())
-            case .x: verified.append(XResolver())
-            case .pinterest, .snapchat, .kick, .threads, .tumblr, .imgur:
-                verified.append(PublicOpenGraphResolver(platform: capability.platform))
-            default: break
-            }
-        }
-        resolvers = verified
+        // Every listed public source can be inspected now, but only a `.passing` row in the
+        // generated matrix authorizes a "verified" product claim. These adapters use public
+        // pages and source-exposed metadata only: no cookies, private sessions, or bypasses.
+        resolvers = [
+            DirectMediaResolver(),
+            TikTokResolver(),
+            InstagramResolver(),
+            XResolver(),
+            PublicOpenGraphResolver(platform: .pinterest),
+            PublicOpenGraphResolver(platform: .snapchat),
+            PublicOpenGraphResolver(platform: .kick),
+            PublicOpenGraphResolver(platform: .threads),
+            PublicOpenGraphResolver(platform: .tumblr),
+            PublicOpenGraphResolver(platform: .imgur),
+            PublicOpenGraphResolver(platform: .youTube)
+        ]
         self.shortLinkExpander = shortLinkExpander
     }
 
@@ -385,6 +386,7 @@ struct OpenGraphDocument {
         var seenMediaURLs = Set<String>()
         var mostRecentImage: Int?
         var mostRecentVideo: Int?
+        var mostRecentAudio: Int?
         for tag in tags {
             let fragment = String(html[Range(tag.range, in: html)!])
             let pairs = Self.attributePairs(in: fragment)
@@ -401,6 +403,11 @@ struct OpenGraphDocument {
                     orderedMedia.append(.init(url: content, type: "video", width: nil, height: nil, duration: nil, alt: nil))
                     mostRecentVideo = orderedMedia.indices.last
                 }
+            case "og:audio", "og:audio:url":
+                if seenMediaURLs.insert(content).inserted {
+                    orderedMedia.append(.init(url: content, type: "audio", width: nil, height: nil, duration: nil, alt: nil))
+                    mostRecentAudio = orderedMedia.indices.last
+                }
             case "og:image:width":
                 if let mostRecentImage, let width = Int(content) { orderedMedia[mostRecentImage].width = width }
             case "og:image:height":
@@ -415,6 +422,10 @@ struct OpenGraphDocument {
                 if let mostRecentVideo, let duration = TimeInterval(content), duration >= 0 {
                     orderedMedia[mostRecentVideo].duration = duration
                 }
+            case "og:audio:duration":
+                if let mostRecentAudio, let duration = TimeInterval(content), duration >= 0 {
+                    orderedMedia[mostRecentAudio].duration = duration
+                }
             default:
                 break
             }
@@ -428,11 +439,13 @@ struct OpenGraphDocument {
     var siteName: String? { attributes["og:site_name"]?.first }
     var media: [OpenGraphCandidate] {
         if !orderedMediaCandidates.isEmpty { return orderedMediaCandidates }
+        let audios = attributes["og:audio"] ?? attributes["og:audio:url"] ?? []
         let videos = attributes["og:video"] ?? attributes["og:video:url"] ?? attributes["twitter:player:stream"] ?? []
         let images = attributes["og:image"] ?? attributes["og:image:url"] ?? attributes["twitter:image"] ?? []
+        let audioItems = audios.map { OpenGraphCandidate(url: $0, type: "audio", width: nil, height: nil, duration: nil, alt: nil) }
         let videoItems = videos.map { OpenGraphCandidate(url: $0, type: "video", width: nil, height: nil, duration: nil, alt: nil) }
         let imageItems = images.map { OpenGraphCandidate(url: $0, type: "image", width: nil, height: nil, duration: nil, alt: nil) }
-        return imageItems + videoItems
+        return audioItems + videoItems + imageItems
     }
 
     func canonicalURL(relativeTo base: URL) -> URL? {

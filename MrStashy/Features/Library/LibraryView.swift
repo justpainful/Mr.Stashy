@@ -10,8 +10,12 @@ struct LibraryView: View {
     @State private var mediaEntries: [ArchivedMediaSummary] = []
     @State private var archivePendingDeletion: ArchivedPostSummary?
     @State private var presentedArchive: ArchiveRoute?
+    @State private var scope: LibraryScope = .all
+    @State private var showCreateCollection = false
+    @State private var collectionName = ""
 
     private enum LibraryMode: String, CaseIterable, Identifiable { case posts, media; var id: String { rawValue } }
+    private enum LibraryScope: Hashable { case all, pinned, collection(UUID) }
     private struct ArchiveRoute: Identifiable {
         let archiveID: UUID
         var id: UUID { archiveID }
@@ -28,6 +32,7 @@ struct LibraryView: View {
                 .padding(.horizontal, 20)
                 searchField
                 filters
+                organizationScopes
                 content
             }
         }
@@ -58,6 +63,17 @@ struct LibraryView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        }
+        .alert(String(localized: "library.collection.create"), isPresented: $showCreateCollection) {
+            TextField(String(localized: "library.collection.name"), text: $collectionName)
+            Button(String(localized: "action.cancel"), role: .cancel) { collectionName = "" }
+            Button(String(localized: "library.collection.create")) {
+                let name = collectionName
+                collectionName = ""
+                Task { await appState.createCollection(named: name) }
+            }
+        } message: {
+            Text(String(localized: "library.collection.create.body"))
         }
     }
 
@@ -94,6 +110,34 @@ struct LibraryView: View {
         .padding(.horizontal, 20)
     }
 
+    private var organizationScopes: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ScopeChip(title: String(localized: "library.scope.all"), symbol: "square.grid.2x2", isSelected: scope == .all) {
+                    scope = .all
+                }
+                ScopeChip(title: String(localized: "library.scope.pinned"), symbol: "pin.fill", isSelected: scope == .pinned) {
+                    scope = .pinned
+                }
+                ForEach(appState.libraryOrganization.collections) { collection in
+                    ScopeChip(title: collection.name, symbol: collection.symbol, isSelected: scope == .collection(collection.id)) {
+                        scope = .collection(collection.id)
+                    }
+                }
+                Button { showCreateCollection = true } label: {
+                    Image(systemName: "plus")
+                        .font(.subheadline.weight(.bold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel(Text(String(localized: "library.collection.create")))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 2)
+        }
+        .scrollIndicators(.hidden)
+    }
+
     @ViewBuilder private var content: some View {
         if (mode == .posts && filteredEntries.isEmpty) || (mode == .media && filteredMediaEntries.isEmpty) {
             VStack(spacing: 14) {
@@ -113,12 +157,16 @@ struct LibraryView: View {
                         Button { presentedArchive = ArchiveRoute(archiveID: item.id) } label: { PostRow(summary: item) }
                             .buttonStyle(.plain)
                             .swipeActions { deleteAction(item) }
+                            .swipeActions(edge: .leading) { organizeActions(archiveID: item.id) }
+                            .contextMenu { organizeMenu(archiveID: item.id) }
                     }
                 } else {
                     ForEach(filteredMediaEntries) { item in
                         Button { presentedArchive = ArchiveRoute(archiveID: item.archiveID) } label: { MediaRow(item: item) }
                             .buttonStyle(.plain)
                             .swipeActions { deleteAction(ArchivedPostSummary(id: item.archiveID, platform: item.platform, author: item.author, text: "", mediaCount: 1, savedAt: item.savedAt, localFolderName: item.archiveID.uuidString)) }
+                            .swipeActions(edge: .leading) { organizeActions(archiveID: item.archiveID) }
+                            .contextMenu { organizeMenu(archiveID: item.archiveID) }
                     }
                 }
             }
@@ -142,14 +190,16 @@ struct LibraryView: View {
     }
 
     private var filteredEntries: [ArchivedPostSummary] {
-        guard let selectedPlatform else { return entries }
-        return entries.filter { $0.platform == selectedPlatform }
+        entries.filter { item in
+            (selectedPlatform == nil || item.platform == selectedPlatform) && isIncludedInScope(item.id)
+        }
     }
 
     private var filteredMediaEntries: [ArchivedMediaSummary] {
         mediaEntries.filter { item in
             (selectedPlatform == nil || item.platform == selectedPlatform) &&
-                (selectedMediaType == nil || item.type == selectedMediaType)
+                (selectedMediaType == nil || item.type == selectedMediaType) &&
+                isIncludedInScope(item.archiveID)
         }
     }
 
@@ -161,12 +211,77 @@ struct LibraryView: View {
     private func delete(_ archive: ArchivedPostSummary) async {
         do {
             try await appState.archiveStore.deleteArchive(id: archive.id)
+            await appState.removeArchiveFromOrganization(archive.id)
             appState.libraryPosts = await appState.archiveStore.loadSummaries()
             await refreshEntries()
         } catch {
             appState.lastError = UserVisibleError(message: error.localizedDescription)
         }
         archivePendingDeletion = nil
+    }
+
+    private func isIncludedInScope(_ archiveID: UUID) -> Bool {
+        switch scope {
+        case .all: true
+        case .pinned: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID)
+        case .collection(let id): appState.libraryOrganization.contains(archiveID, in: id)
+        }
+    }
+
+    @ViewBuilder private func organizeActions(archiveID: UUID) -> some View {
+        Button {
+            Task { await appState.togglePinned(archiveID: archiveID) }
+        } label: {
+            Label(
+                String(localized: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
+                systemImage: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "pin.slash" : "pin"
+            )
+        }
+        .tint(StashyTheme.butter)
+    }
+
+    @ViewBuilder private func organizeMenu(archiveID: UUID) -> some View {
+        Button {
+            Task { await appState.togglePinned(archiveID: archiveID) }
+        } label: {
+            Label(
+                String(localized: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
+                systemImage: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "pin.slash" : "pin"
+            )
+        }
+        if !appState.libraryOrganization.collections.isEmpty {
+            Menu(String(localized: "library.collection.add")) {
+                ForEach(appState.libraryOrganization.collections) { collection in
+                    Button {
+                        Task { await appState.toggleMembership(archiveID: archiveID, collectionID: collection.id) }
+                    } label: {
+                        Label(
+                            collection.name,
+                            systemImage: appState.libraryOrganization.contains(archiveID, in: collection.id) ? "checkmark" : collection.symbol
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ScopeChip: View {
+    let title: String
+    let symbol: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(isSelected ? .regular.tint(StashyTheme.aqua.opacity(0.32)).interactive() : .regular.interactive(), in: .capsule)
     }
 }
 

@@ -117,7 +117,7 @@ actor LibraryDatabase {
         try withStatement("INSERT INTO archive_search(archive_id, author, text) VALUES (?, ?, ?);") { statement in
             bind(summary.id.uuidString, to: 1, statement: statement)
             bind(summary.author, to: 2, statement: statement)
-            bind(summary.text, to: 3, statement: statement)
+            bind("\(summary.platform.rawValue) \(summary.text)", to: 3, statement: statement)
             try step(statement)
         }
     }

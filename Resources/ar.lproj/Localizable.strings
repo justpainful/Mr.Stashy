@@ -54,6 +54,15 @@
 "media.selection" = "تحديد الوسائط";
 "media.unknownDimensions" = "الأبعاد غير متاحة";
 
+"library.scope.all" = "الكل";
+"library.scope.pinned" = "المثبتة";
+"library.pin" = "تثبيت";
+"library.unpin" = "إلغاء التثبيت";
+"library.collection.create" = "مجموعة جديدة";
+"library.collection.create.body" = "اجمع المنشورات المرتبطة على هذا الجهاز.";
+"library.collection.name" = "اسم المجموعة";
+"library.collection.add" = "إضافة إلى مجموعة";
+
 "queue.empty.title" = "الطابور فارغ";
 "queue.empty.body" = "ستظهر هنا حالة حفظ المنشورات وتنزيل الوسائط.";
 "queue.itemCount" = "%lld عنصرًا";
