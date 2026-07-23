@@ -58,7 +58,9 @@ final class ScreenshotFlows: XCTestCase {
 
         openTab("Settings", in: app)
         capture(app, named: "settings.png")
-        app.buttons["Platform support status"].tap()
+        let platformStatus = app.buttons["Platform support status"]
+        while !platformStatus.exists { app.swipeUp() }
+        platformStatus.tap()
         capture(app, named: "discord-disabled.png")
         app.buttons["Done"].tap()
 

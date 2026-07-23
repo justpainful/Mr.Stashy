@@ -45,8 +45,9 @@ jobs:
           set -euo pipefail
           device="$(bash scripts/boot_simulator.sh)"
           mkdir -p Artifacts/Demo Artifacts/Screenshots Artifacts/Logs
+          raw_recording="$(pwd -P)/Artifacts/Demo/Stashy-demo-tour-raw.mov"
           recording="$(pwd -P)/Artifacts/Demo/Stashy-demo-tour.mp4"
-          xcrun simctl io "$device" recordVideo --codec=h264 "$recording" &
+          xcrun simctl io "$device" recordVideo --codec=h264 "$raw_recording" &
           recorder_pid=$!
           stop_recording() {
             kill -INT "$recorder_pid" 2>/dev/null || true
@@ -59,6 +60,19 @@ jobs:
             bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
           stop_recording
           trap - EXIT INT TERM
+          test -s "$raw_recording"
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+          # Simulator recordings use variable timestamps and a very tall frame. Re-encode
+          # to a broadly playable MP4 rather than shipping a QuickTime container by name.
+          ffmpeg -y -fflags +genpts -i "$raw_recording" -map 0:v:0 \
+            -vf 'scale=-2:1920:flags=lanczos,fps=30' \
+            -c:v libx264 -profile:v high -level:v 4.1 -pix_fmt yuv420p \
+            -movflags +faststart -an "$recording"
+          ffprobe -v error -select_streams v:0 \
+            -show_entries stream=codec_name,pix_fmt,level,avg_frame_rate \
+            -of default=noprint_wrappers=1 "$recording"
           test -s "$recording"
       - name: Build unsigned sideload IPA
         run: bash scripts/package_ipa.sh "$SCHEME"
