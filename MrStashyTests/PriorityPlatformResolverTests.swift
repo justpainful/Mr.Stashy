@@ -24,6 +24,21 @@ struct PriorityPlatformResolverTests {
         #expect(post.media.map(\.orderIndex) == [0, 1, 2])
     }
 
+    @Test func tikTokPublicPayloadUsesItsPlayableVideoBeforeOpenGraphThumbnail() async throws {
+        let source = try #require(URL(string: "https://www.tiktok.com/@stashy/video/1234567890"))
+        let client = FixtureResolverClient(html: """
+        <meta property="og:image" content="https://cdn.example.com/thumbnail.jpg">
+        <script id="SIGI_STATE">{"video":{"playAddr":"https:\\/\\/cdn.example.com\\/play?item=123"}}</script>
+        """)
+
+        let post = try await TikTokResolver(client: client).resolve(
+            ResolveRequest(originalURL: source, canonicalURL: source)
+        )
+
+        #expect(post.media.map(\.type) == [.video])
+        #expect(post.media.first?.highestVariant?.url.absoluteString == "https://cdn.example.com/play?item=123")
+    }
+
     @Test(arguments: [Platform.tikTok, .instagram, .x])
     func priorityResolversPreserveSourceExposedMixedMediaOrder(platform: Platform) async throws {
         let source = try #require(URL(string: sourceURL(for: platform)))
