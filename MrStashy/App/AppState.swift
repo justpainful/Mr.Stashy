@@ -37,12 +37,14 @@ final class AppState {
 #if DEBUG
         await configureScreenshotFixturesIfNeeded()
 #endif
-        let links = PendingShareStore.consumePendingURLs()
-        if !links.isEmpty {
-            pendingLinks.append(contentsOf: links)
-            selectedTab = .catch
-        }
+        consumePendingShares()
         await restorePendingQueue()
+    }
+
+    /// The Share extension can write to the App Group while Stashy is suspended. Read its
+    /// queue each time the scene becomes active so those links are available immediately.
+    func consumePendingShares() {
+        appendPendingLinks(PendingShareStore.consumePendingURLs())
     }
 
     func handleOpenURL(_ url: URL) {
