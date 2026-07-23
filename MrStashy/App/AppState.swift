@@ -128,9 +128,7 @@ final class AppState {
         libraryOrganization = LibraryOrganization()
         try? await organizationStore.save(libraryOrganization)
         let fixture = Self.screenshotPost(isArabic: Locale.preferredLanguages.first?.hasPrefix("ar") == true)
-        try? await archiveStore.deleteAllArchives()
-        libraryPosts = []
-        if let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
+        if libraryPosts.isEmpty, let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
             _ = try? await archiveStore.saveTextCard(pngData: data, sourcePost: fixture)
             libraryPosts = await archiveStore.loadSummaries()
         }
