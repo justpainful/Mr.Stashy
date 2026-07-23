@@ -44,7 +44,7 @@ final class ScreenshotFlows: XCTestCase {
         XCTAssertTrue(collectionName.waitForExistence(timeout: 5))
         collectionName.tap()
         collectionName.typeText("Weekend ideas")
-        app.buttons["New collection"].tap()
+        app.alerts["New collection"].buttons["New collection"].tap()
         capture(app, named: "library-collection.png")
         let mediaSegment = app.buttons["Media"]
         XCTAssertTrue(mediaSegment.waitForExistence(timeout: 5))

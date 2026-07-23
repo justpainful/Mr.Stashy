@@ -167,13 +167,59 @@ struct PublicOpenGraphResolver: PlatformResolver {
 struct TikTokResolver: PlatformResolver {
     let platform: Platform = .tikTok
     private let openGraph: PublicOpenGraphResolver
+    private let client: any ResolverHTTPClient
 
     init(client: any ResolverHTTPClient = URLSessionResolverHTTPClient()) {
         openGraph = PublicOpenGraphResolver(platform: .tikTok, client: client)
+        self.client = client
     }
 
     func canHandle(_ url: URL) -> Bool { openGraph.canHandle(url) }
-    func resolve(_ request: ResolveRequest) async throws -> ResolvedPost { try await openGraph.resolve(request) }
+
+    func resolve(_ request: ResolveRequest) async throws -> ResolvedPost {
+        var pageRequest = URLRequest(url: request.canonicalURL)
+        pageRequest.timeoutInterval = 20
+        pageRequest.setValue("Stashy/0.1 (local archive client)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await client.data(for: pageRequest)
+        try validate(response)
+        if let html = String(data: data, encoding: .utf8),
+           let videoURL = TikTokPublicDocument.firstPlayableVideoURL(in: html, relativeTo: request.canonicalURL) {
+            let variant = MediaVariant(
+                id: UUID(), url: videoURL, headers: ["Referer": request.canonicalURL.absoluteString], expirationDate: nil,
+                width: nil, height: nil, bitrate: nil, fps: nil, isHDR: nil, codec: nil,
+                container: "mp4", hasSeparateAudio: false, estimatedBytes: nil,
+                qualityLabel: "Public source", cleanliness: .unknown
+            )
+            let media = ResolvedMedia(
+                id: UUID(), orderIndex: 0, type: .video, thumbnailURL: nil, variants: [variant],
+                width: nil, height: nil, duration: nil, altText: nil
+            )
+            return ResolvedPost(
+                id: UUID(), platform: .tikTok, originalURL: request.originalURL, canonicalURL: request.canonicalURL,
+                author: ResolvedAuthor(platformID: nil, displayName: "TikTok", username: nil, avatarURL: nil, profileURL: nil, badges: []),
+                text: "", createdAt: nil, fetchedAt: .now, quotedPost: nil, media: [media],
+                resolverVersion: "tiktok-public-json.1", warnings: []
+            )
+        }
+        return try await openGraph.resolve(request)
+    }
+}
+
+private enum TikTokPublicDocument {
+    /// TikTok's public page payload has used both escaped JSON and direct JSON string values.
+    /// Read only a source-exposed playable address; no cookies, sessions, or private APIs.
+    static func firstPlayableVideoURL(in html: String, relativeTo base: URL) -> URL? {
+        let pattern = #"\"(?:playAddr|downloadAddr)\"\s*:\s*\"([^\"]+)\""#
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let match = expression.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range(at: 1), in: html)
+        else { return nil }
+        let raw = String(html[range])
+            .replacingOccurrences(of: "\\/", with: "/")
+            .replacingOccurrences(of: "\\u002F", with: "/")
+            .replacingOccurrences(of: "\\u0026", with: "&")
+        return URL(string: raw, relativeTo: base)?.absoluteURL
+    }
 }
 
 struct InstagramResolver: PlatformResolver {

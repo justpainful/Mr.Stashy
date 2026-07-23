@@ -9,8 +9,10 @@ struct ArchivedMediaPreview: View {
 
     var body: some View {
         switch type {
-        case .photo, .gif:
+        case .photo:
             ArchivedImagePreview(url: url)
+        case .gif:
+            ArchivedGIFPreview(url: url)
         case .video:
             ArchivedVideoPreview(url: url)
         case .audio:
@@ -20,6 +22,25 @@ struct ArchivedMediaPreview: View {
             }
             .buttonStyle(.glass)
         }
+    }
+}
+
+private struct ArchivedGIFPreview: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 16
+        imageView.image = AnimatedGIF.make(url: url)
+        imageView.startAnimating()
+        return imageView
+    }
+
+    func updateUIView(_ imageView: UIImageView, context: Context) {
+        imageView.image = AnimatedGIF.make(url: url)
+        imageView.startAnimating()
     }
 }
 
@@ -80,5 +101,24 @@ private enum LocalImageThumbnail {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return UIImage(cgImage: image)
+    }
+}
+
+private enum AnimatedGIF {
+    static func make(url: URL) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let count = CGImageSourceGetCount(source)
+        guard count > 1 else { return LocalImageThumbnail.make(url: url, maxPixelSize: 1_600) }
+        var frames: [UIImage] = []
+        var duration: TimeInterval = 0
+        for index in 0 ..< count {
+            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
+            frames.append(UIImage(cgImage: image))
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
+            let gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+            let delay = (gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? (gif?[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
+            duration += max(delay, 0.02)
+        }
+        return UIImage.animatedImage(with: frames, duration: duration)
     }
 }

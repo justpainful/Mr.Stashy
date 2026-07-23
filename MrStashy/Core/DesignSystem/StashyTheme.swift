@@ -1,14 +1,15 @@
 import SwiftUI
 
 enum StashyTheme {
-    static let cream = Color(red: 0.98, green: 0.95, blue: 0.87)
-    static let charcoal = Color(red: 0.12, green: 0.12, blue: 0.13)
-    static let lavender = Color(red: 0.61, green: 0.51, blue: 0.88)
-    static let butter = Color(red: 0.98, green: 0.80, blue: 0.32)
-    static let pink = Color(red: 0.92, green: 0.44, blue: 0.61)
-    static let aqua = Color(red: 0.52, green: 0.80, blue: 0.79)
-    static let green = Color(red: 0.18, green: 0.42, blue: 0.30)
-    static let darkSurface = Color(red: 0.12, green: 0.13, blue: 0.13)
+    static let cream = Color(red: 1.00, green: 0.97, blue: 0.94)
+    static let charcoal = Color(red: 0.14, green: 0.12, blue: 0.18)
+    static let lavender = Color(red: 0.45, green: 0.37, blue: 0.84)
+    static let butter = Color(red: 1.00, green: 0.75, blue: 0.31)
+    static let pink = Color(red: 0.94, green: 0.34, blue: 0.47)
+    static let aqua = Color(red: 0.34, green: 0.77, blue: 0.84)
+    // Kept as the semantic success/action token for compatibility; it is indigo, not green.
+    static let green = Color(red: 0.39, green: 0.31, blue: 0.76)
+    static let darkSurface = Color(red: 0.10, green: 0.09, blue: 0.14)
     static let surface = Color(uiColor: .secondarySystemBackground)
 }
 
