@@ -17,6 +17,11 @@ final class ScreenshotFlows: XCTestCase {
         capture(app, named: "onboarding.png")
         app.buttons["onboarding.skip"].tap()
         capture(app, named: "catch-empty.png")
+        let tikTok = app.buttons["catch.source.tikTok"]
+        XCTAssertTrue(tikTok.waitForExistence(timeout: 5))
+        tikTok.tap()
+        capture(app, named: "source-picker-tiktok.png")
+        app.buttons["Cancel"].tap()
 
         app.terminate()
         app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "--ui-results-fixture"])
@@ -32,6 +37,15 @@ final class ScreenshotFlows: XCTestCase {
         capture(app, named: "queue.png")
         openTab("Library", in: app)
         capture(app, named: "library-posts.png")
+        let createCollection = app.buttons["New collection"]
+        XCTAssertTrue(createCollection.waitForExistence(timeout: 5))
+        createCollection.tap()
+        let collectionName = app.textFields["Collection name"]
+        XCTAssertTrue(collectionName.waitForExistence(timeout: 5))
+        collectionName.tap()
+        collectionName.typeText("Weekend ideas")
+        app.buttons["New collection"].tap()
+        capture(app, named: "library-collection.png")
         let mediaSegment = app.buttons["Media"]
         XCTAssertTrue(mediaSegment.waitForExistence(timeout: 5))
         mediaSegment.tap()

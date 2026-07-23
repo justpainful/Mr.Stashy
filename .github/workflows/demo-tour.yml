@@ -7,6 +7,7 @@ on:
     branches: [codex/build-stashy-v1]
     paths:
       - .github/workflows/demo-tour.yml
+      - MrStashyUITests/**
 
 permissions:
   contents: read
