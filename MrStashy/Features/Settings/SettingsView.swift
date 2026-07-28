@@ -26,7 +26,12 @@ struct SettingsView: View {
                 Section(L10n.value("settings.appearance")) {
                     Picker(L10n.value("settings.appearance"), selection: settingBinding(\.appearance)) { ForEach(UserSettings.Appearance.allCases, id: \.self) { Text(L10n.value("settings.appearance.\($0.rawValue)")).tag($0) } }
                     Picker(L10n.value("settings.theme"), selection: settingBinding(\.theme)) { ForEach(UserSettings.Theme.allCases, id: \.self) { Text(L10n.value("settings.theme.\($0.rawValue)")).tag($0) } }
-                    Picker(L10n.value("settings.language"), selection: settingBinding(\.language)) { ForEach(UserSettings.AppLanguage.allCases, id: \.self) { Text(L10n.value("settings.language.\($0.rawValue)")).tag($0) } }
+                    // Language goes through AppState so the lookup bundle is installed in the
+                    // same turn as the mutation that triggers the redraw.
+                    Picker(L10n.value("settings.language"), selection: Binding(
+                        get: { appState.settings.language },
+                        set: { appState.setLanguage($0) }
+                    )) { ForEach(UserSettings.AppLanguage.allCases, id: \.self) { Text(L10n.value("settings.language.\($0.rawValue)")).tag($0) } }
                     Toggle(L10n.value("settings.reduceMotion"), isOn: settingBinding(\.reduceMotion))
                 }
                 Section(L10n.value("settings.sources")) {

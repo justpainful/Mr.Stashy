@@ -307,8 +307,14 @@ enum SignedURLExpiry {
 enum AccessWallDetector {
     private static let markers = [
         "accounts/login", "/login?", "login_and_signup", "please log in", "log in to continue",
-        "sign up to continue", "restricted_page", "age-restricted", "this account is private",
-        "content isn't available", "content is not available", "consent.", "gdpr-consent"
+        "sign up to continue", "restricted_page", "age-restricted",
+        "content isn't available", "content is not available", "gdpr-consent"
+    ]
+
+    /// Phrases that identify a private post. A bare "private" also matches ordinary payload
+    /// keys such as `"is_private":false`, which turned public posts into "this post is private".
+    private static let privateMarkers = [
+        "this account is private", "this post is private", "sorry, this page isn", "account is private"
     ]
 
     /// Sources answer a login or consent interstitial with HTTP 200, so status code alone
@@ -316,10 +322,8 @@ enum AccessWallDetector {
     static func wall(in page: FetchedPage, requested: URL) -> ResolverError? {
         let lowered = page.html.lowercased()
         let landedElsewhere = page.url.path.count <= 1 && requested.path.count > 1
-        let hasMarker = markers.contains { lowered.contains($0) }
-        guard hasMarker || landedElsewhere else { return nil }
-        if lowered.contains("private") { return .contentPrivate }
-        if hasMarker { return .authenticationRequired }
-        return .contentNotFound
+        if privateMarkers.contains(where: { lowered.contains($0) }) { return .contentPrivate }
+        if markers.contains(where: { lowered.contains($0) }) { return .authenticationRequired }
+        return landedElsewhere ? .contentNotFound : nil
     }
 }

@@ -281,8 +281,12 @@ struct XResolver: PlatformResolver {
 /// Reproduces the token X's embed script derives from a post identifier.
 enum XSyndicationToken {
     static func value(for postID: String) -> String {
-        guard let numeric = Double(postID), numeric > 0 else { return "a" }
+        // A post identifier arrives from a pasted address and is not length-checked upstream,
+        // so an absurdly long run of digits must not reach the `Int` conversion below, where
+        // it would trap and take the app down.
+        guard postID.count <= 20, let numeric = Double(postID), numeric > 0, numeric.isFinite else { return "a" }
         let scaled = (numeric / 1e15) * Double.pi
+        guard scaled.isFinite, scaled < 1e15 else { return "a" }
         let encoded = base36(scaled)
             .replacingOccurrences(of: "0", with: "")
             .replacingOccurrences(of: ".", with: "")
@@ -291,7 +295,9 @@ enum XSyndicationToken {
 
     private static func base36(_ value: Double) -> String {
         let digits = Array("0123456789abcdefghijklmnopqrstuvwxyz")
-        var integerPart = Int(value.rounded(.down))
+        let floor = value.rounded(.down)
+        guard floor >= 0, floor < Double(Int.max) else { return "0" }
+        var integerPart = Int(floor)
         var fraction = value - Double(integerPart)
         var whole = integerPart == 0 ? "0" : ""
         while integerPart > 0 {

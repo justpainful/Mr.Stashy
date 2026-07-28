@@ -38,6 +38,22 @@ final class AppState {
     let archiveStore = ArchiveStore()
     let resolverRegistry = ResolverRegistry()
 
+    init() {
+        // The lookup bundle has to be installed before the first `body` runs. Doing it from a
+        // `.task` meant the first render — tab titles, the whole Catch screen — had already
+        // resolved against the device language, so a saved Arabic preference did nothing until
+        // something unrelated forced a redraw.
+        L10n.setLanguage(settings.language)
+    }
+
+    /// Changes the interface language. `L10n`'s bundle is not observable, so it is installed
+    /// here, in the same turn as the observable mutation that triggers the redraw.
+    func setLanguage(_ language: UserSettings.AppLanguage) {
+        L10n.setLanguage(language)
+        settings.language = language
+        settings.save()
+    }
+
     func bootstrap() async {
         await archiveStore.bootstrap()
         libraryPosts = await archiveStore.loadSummaries()
@@ -289,7 +305,8 @@ final class AppState {
                 sourceURL: item.post.originalURL,
                 selectedOrderIndices: Set(item.post.media.filter { item.selectedMediaIDs.contains($0.id) }.map(\.orderIndex)),
                 mode: item.mode,
-                quality: item.quality
+                quality: item.quality,
+                archiveID: item.post.id
             )
             do {
                 try await pendingQueueStore.upsert(request)
@@ -324,8 +341,11 @@ final class AppState {
             ) { [weak self] progress in
                 await self?.apply(progress, toQueueItem: item.id)
             }
-            // The archive is already on disk and verified. Cancelling now would throw away a
-            // finished capture and tell the person it did not happen.
+            // The archive is durable the moment `save` returns, so the queue entry goes now
+            // rather than after the Photos step, which can sit on a permission alert.
+            try? await pendingQueueStore.remove(id: item.id)
+            // Cancelling from here would throw away a finished capture and tell the person it
+            // did not happen, so the remaining steps are not cancellation points.
             if settings.saveToPhotos {
                 updateQueueItem(id: item.id, stage: .savingToPhotos)
                 do {
@@ -339,7 +359,6 @@ final class AppState {
             if !warnings.isEmpty {
                 lastNotice = UserVisibleError(message: warnings.joined(separator: "\n"))
             }
-            try? await pendingQueueStore.remove(id: item.id)
         } catch is CancellationError {
             updateQueueItem(id: item.id, stage: .cancelled)
             try? await pendingQueueStore.remove(id: item.id)
@@ -357,7 +376,8 @@ final class AppState {
         let requests = await pendingQueueStore.load()
         for request in requests where activeSaveTasks[request.id] == nil {
             // A post that already finished before the app was killed must not be fetched again.
-            if libraryPosts.contains(where: { $0.id == request.id }) {
+            // The comparison is against the archive identifier, not the queue row's own.
+            if let archiveID = request.archiveID, libraryPosts.contains(where: { $0.id == archiveID }) {
                 try? await pendingQueueStore.remove(id: request.id)
                 continue
             }
@@ -395,6 +415,10 @@ final class AppState {
 
     private func apply(_ update: ArchiveSaveProgress, toQueueItem id: UUID) {
         guard let index = queueItems.firstIndex(where: { $0.id == id }) else { return }
+        // The transfer's final progress is delivered from an unstructured task, so it can land
+        // after the row is already finished. Writing `.downloading` over that would strand a
+        // completed row at a fraction, and it would never leave the queue again.
+        guard !queueItems[index].stage.isFinished else { return }
         let now = Date.now
         var sample = transferSamples[id] ?? QueueTransferSample()
         // The store reports absolute totals, so the rate is a plain difference: no accumulation

@@ -20,10 +20,24 @@ actor ArchiveStore {
     private var databaseURL: URL { root.appendingPathComponent("Database/library.sqlite", isDirectory: false) }
 
     func bootstrap() async {
+        sweepInterruptedWork()
         do {
             try await database.migrate(at: databaseURL)
             try await rebuildIndexIfNeeded()
         } catch { /* File manifests remain the safe read-only fallback. */ }
+    }
+
+    /// Removes staging folders left by a save that was killed mid-transfer. Cleanup is
+    /// otherwise `defer`-only, which does not run when the system terminates the app, and the
+    /// folders are dot-prefixed so their bytes were invisible to both the storage figure and
+    /// Delete Library — permanently consumed and unreclaimable.
+    private func sweepInterruptedWork() {
+        guard let contents = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        for url in contents {
+            let name = url.lastPathComponent
+            guard name.hasPrefix(".tmp-") || name.hasPrefix(".import-") else { continue }
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     func loadSummaries(matching query: String? = nil) async -> [ArchivedPostSummary] {
@@ -92,7 +106,9 @@ actor ArchiveStore {
         onProgress: @escaping @Sendable (ArchiveSaveProgress) async -> Void = { _ in }
     ) async throws -> [String] {
         try Task.checkCancellation()
-        guard savesInFlight.insert(post.id).inserted else { throw ResolverError.verificationFailure }
+        // A readable reason, not a "verification failure": the same post is already saving, and
+        // letting both run would have them move two staging folders onto one destination.
+        guard savesInFlight.insert(post.id).inserted else { throw StashPackageError.duplicateArchive }
         defer { savesInFlight.remove(post.id) }
 
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
@@ -118,11 +134,14 @@ actor ArchiveStore {
                 warnings.append(L10n.format("archive.warning.itemSkipped", Int64(item.orderIndex + 1), ResolverError.qualityUnavailable.localizedDescription))
                 continue
             }
-            let destinationName = "\(item.orderIndex)-\(item.id.uuidString).\(variant.url.pathExtension.isEmpty ? "bin" : variant.url.pathExtension)"
-            let destination = temporary.appendingPathComponent("media").appendingPathComponent(destinationName)
+            // The final name is decided after the transfer, from what the server and the file's
+            // own header say it is. Naming it from the address beforehand meant a signed CDN
+            // link with no path extension — the normal TikTok case — landed as `.bin`, which
+            // neither the player nor Save to Photos can open.
+            let staging = temporary.appendingPathComponent("media").appendingPathComponent("\(item.orderIndex)-\(item.id.uuidString).part")
             do {
                 let priorBytes = completedBefore
-                let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
+                let outcome = try await downloadAndVerify(variant: variant, type: item.type, destination: staging, allowCellular: allowCellular) { byteProgress in
                     await onProgress(.init(
                         mediaIndex: selectedIndex,
                         mediaCount: selectedMedia.count,
@@ -132,9 +151,12 @@ actor ArchiveStore {
                         overallExpectedBytes: overallExpected
                     ))
                 }
-                deduplicateFile(at: destination, checksum: checksum)
+                let destinationName = "\(item.orderIndex)-\(item.id.uuidString).\(outcome.fileExtension)"
+                let destination = temporary.appendingPathComponent("media").appendingPathComponent(destinationName)
+                try fileManager.moveItem(at: staging, to: destination)
+                deduplicateFile(at: destination, checksum: outcome.checksum)
                 let archivedVariant = variant.safeArchiveCopy
-                records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: checksum, variant: archivedVariant))
+                records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: outcome.checksum, variant: archivedVariant))
                 let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
                 completedBefore += completedBytes
                 await onProgress(.init(
@@ -148,7 +170,7 @@ actor ArchiveStore {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                try? fileManager.removeItem(at: destination)
+                try? fileManager.removeItem(at: staging)
                 lastFailure = error
                 warnings.append(L10n.format("archive.warning.itemSkipped", Int64(item.orderIndex + 1), error.localizedDescription))
             }
@@ -185,19 +207,22 @@ actor ArchiveStore {
         }
     }
 
+    /// Reports what the library actually occupies on the volume. Deduplicated files are hard
+    /// links sharing one inode, so counting each directory entry reported several times the
+    /// real usage and made deleting the duplicates appear to free nothing.
     func storageUsageBytes() -> Int64 {
-        guard let enumerator = fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else { return 0 }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey]
+        guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: keys) else { return 0 }
         var total: Int64 = 0
+        var countedInodes = Set<Int>()
         for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true,
-                  let size = values.fileSize
-            else { continue }
-            total += Int64(size)
+            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            // Hard links share an inode; each one is its own directory entry.
+            if let inode = (try? fileManager.attributesOfItem(atPath: url.path))?[.systemFileNumber] as? Int,
+               !countedInodes.insert(inode).inserted {
+                continue
+            }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
         }
         return total
     }
@@ -292,6 +317,24 @@ actor ArchiveStore {
             try MediaIntegrityVerifier.validate(file: mediaURL, type: media.type)
             deduplicateFile(at: mediaURL, checksum: expected)
         }
+        // Only the files the manifest accounts for may enter the library. Moving the extracted
+        // folder wholesale let a hand-crafted package smuggle in unlisted files, which then sat
+        // in the archive unreferenced by anything.
+        let declared = Set(["manifest.json", "summary.json"])
+        let declaredMedia = Set(manifest.orderedMedia.compactMap(\.localFilename))
+        let present = try fileManager.contentsOfDirectory(at: importedDirectory, includingPropertiesForKeys: nil)
+        for entry in present {
+            let name = entry.lastPathComponent
+            if name == "media" {
+                let mediaFiles = try fileManager.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil)
+                guard mediaFiles.allSatisfy({ declaredMedia.contains($0.lastPathComponent) }) else {
+                    throw StashPackageError.invalidPackage
+                }
+                continue
+            }
+            guard declared.contains(name) else { throw StashPackageError.invalidPackage }
+        }
+
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
         let finalDirectory = postsRoot.appendingPathComponent(manifest.archiveID.uuidString, isDirectory: true)
         guard !fileManager.fileExists(atPath: finalDirectory.path) else { throw StashPackageError.duplicateArchive }
@@ -374,13 +417,18 @@ actor ArchiveStore {
         return index
     }
 
+    private struct DownloadOutcome {
+        var checksum: String
+        var fileExtension: String
+    }
+
     private func downloadAndVerify(
         variant: MediaVariant,
         type: MediaType,
         destination: URL,
         allowCellular: Bool,
         onProgress: @escaping @Sendable (DownloadByteProgress) async -> Void
-    ) async throws -> String {
+    ) async throws -> DownloadOutcome {
         if let expiry = variant.expirationDate, expiry < .now { throw ResolverError.expiredMediaURL }
         var request = URLRequest(url: variant.url)
         request.timeoutInterval = 60
@@ -391,7 +439,10 @@ actor ArchiveStore {
             throw ResolverError.verificationFailure
         }
         try MediaIntegrityVerifier.validate(file: destination, type: type)
-        return try SHA256.fileDigest(destination)
+        return DownloadOutcome(
+            checksum: try SHA256.fileDigest(destination),
+            fileExtension: MediaFileExtension.resolve(contentType: contentType, sourceURL: variant.url, type: type)
+        )
     }
 
 }
@@ -406,6 +457,38 @@ struct ArchiveSaveProgress: Sendable {
     var expectedBytes: Int64?
     var overallCompletedBytes: Int64
     var overallExpectedBytes: Int64?
+}
+
+/// Chooses the on-disk extension for a saved file.
+///
+/// The extension is what iOS uses to type a local file, so it decides whether the archived
+/// media will play and whether Photos will accept it. A signed CDN address usually carries no
+/// extension at all, so the server's declared type is the primary source and the media kind is
+/// the backstop — never `bin`, which types as nothing and silently breaks both.
+enum MediaFileExtension {
+    private static let byMIMEType: [String: String] = [
+        "video/mp4": "mp4", "video/quicktime": "mov", "video/x-m4v": "m4v", "video/webm": "webm",
+        "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
+        "image/heic": "heic", "image/heif": "heic", "image/avif": "avif",
+        "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/wav": "wav",
+        "audio/x-wav": "wav", "audio/aac": "aac", "audio/flac": "flac", "audio/ogg": "ogg"
+    ]
+
+    static func resolve(contentType: String, sourceURL: URL, type: MediaType) -> String {
+        // `Content-Type` often carries parameters, e.g. `video/mp4; charset=utf-8`.
+        let mime = contentType.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        if let known = byMIMEType[mime] { return known }
+        let pathExtension = sourceURL.pathExtension.lowercased()
+        if !pathExtension.isEmpty, pathExtension.count <= 5, pathExtension.allSatisfy(\.isLetter) || pathExtension.allSatisfy(\.isNumber) {
+            return pathExtension
+        }
+        switch type {
+        case .video: return "mp4"
+        case .photo: return "jpg"
+        case .gif: return "gif"
+        case .audio: return "m4a"
+        }
+    }
 }
 
 enum MediaIntegrityVerifier {
@@ -428,20 +511,28 @@ enum MediaIntegrityVerifier {
         let isISOBaseMedia = header.count >= 8 && header[4 ..< 8] == Data("ftyp".utf8)
         let isRIFF = header.starts(with: Data("RIFF".utf8))
         let isMatroska = header.starts(with: [0x1A, 0x45, 0xDF, 0xA3])
+        // ISO base media and RIFF are both container families that hold video, images and audio
+        // alike, so the brand at bytes 8..<12 is what actually distinguishes them. Accepting the
+        // container alone would let a WebP or an audio-only M4A pass as a video.
+        let brand = header.count >= 12 ? String(decoding: header[8 ..< 12], as: UTF8.self).lowercased() : ""
+        let riffForm = isRIFF ? brand : ""
+        let isoBrand = isISOBaseMedia ? brand : ""
         switch type {
         case .photo, .gif:
-            // JPEG, PNG, GIF, RIFF/WebP, HEIC and AVIF (both ISO base media), and BMP.
+            let isImageISO = ["heic", "heix", "hevc", "mif1", "msf1", "avif", "avis"].contains(isoBrand)
             guard header.starts(with: [0xFF, 0xD8])
                 || header.starts(with: [0x89, 0x50, 0x4E, 0x47])
                 || header.starts(with: Data("GIF".utf8))
-                || isRIFF
-                || isISOBaseMedia
+                || riffForm == "webp"
+                || isImageISO
                 || header.starts(with: Data("BM".utf8))
             else { throw ResolverError.verificationFailure }
         case .video:
             // MP4/MOV/HEVC share the ISO base media header; WebM and MKV use EBML; a few hosts
             // still serve AVI inside a RIFF container.
-            guard isISOBaseMedia || isMatroska || isRIFF else { throw ResolverError.verificationFailure }
+            let isVideoISO = isISOBaseMedia && !["m4a ", "m4b ", "m4p "].contains(isoBrand)
+                && !["heic", "heix", "mif1", "msf1", "avif", "avis"].contains(isoBrand)
+            guard isVideoISO || isMatroska || riffForm == "avi " else { throw ResolverError.verificationFailure }
         case .audio:
             guard header.starts(with: Data("ID3".utf8))
                 || isRIFF

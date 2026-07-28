@@ -6,6 +6,11 @@ struct PendingQueueRequest: Codable, Sendable, Identifiable {
     var selectedOrderIndices: Set<Int>
     var mode: QueueItem.SaveMode
     var quality: UserSettings.Quality?
+    /// The archive this request was going to produce. `id` identifies the queue row, not the
+    /// archive, so without this a completed save could never be recognised on relaunch and the
+    /// whole post was downloaded again. Optional so an entry written by an older build still
+    /// decodes.
+    var archiveID: UUID?
 }
 
 actor PendingQueueStore {

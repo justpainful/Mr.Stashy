@@ -54,7 +54,9 @@ private struct ArchivedGIFPreview: UIViewRepresentable {
         imageView.image = nil
         let source = url
         context.coordinator.task = Task { [weak imageView] in
-            let animation = await Task.detached(priority: .userInitiated) {
+            // A child task, not a detached one, so leaving the screen actually stops the decode
+            // rather than leaving it to finish frames nobody will see.
+            let animation = await Task(priority: .userInitiated) {
                 AnimatedGIF.make(url: source)
             }.value
             guard !Task.isCancelled, let imageView else { return }
@@ -130,14 +132,26 @@ private enum LocalImageThumbnail {
 }
 
 private enum AnimatedGIF {
+    /// A long GIF is bounded so a pathological file cannot decode thousands of frames.
+    private static let maximumFrames = 300
+
     static func make(url: URL) -> UIImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let count = CGImageSourceGetCount(source)
         guard count > 1 else { return LocalImageThumbnail.make(url: url, maxPixelSize: 1_600) }
+        // Frames are downsampled like the still path. Decoding them at full resolution was an
+        // unintended asymmetry: the same view already caps a single image at 1600px.
+        let frameOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: false,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1_024
+        ]
         var frames: [UIImage] = []
         var duration: TimeInterval = 0
-        for index in 0 ..< count {
-            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
+        for index in 0 ..< min(count, maximumFrames) {
+            if Task.isCancelled { return nil }
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, frameOptions as CFDictionary) else { continue }
             frames.append(UIImage(cgImage: image))
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
             let gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]

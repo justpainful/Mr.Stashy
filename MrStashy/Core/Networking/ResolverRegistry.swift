@@ -192,10 +192,12 @@ struct PageResolutionEngine: Sendable {
 
         let verified = await verify(usable)
         if verified.isEmpty {
-            if let page, let wall = AccessWallDetector.wall(in: page, requested: request.canonicalURL) { throw wall }
+            // Expiry is checked first: the page told us plainly that its addresses went stale,
+            // which is more specific than anything the wall heuristic can infer.
             if usable.contains(where: { SignedURLExpiry.date(in: $0.url).map { $0 < .now } == true }) {
                 throw ResolverError.expiredMediaURL
             }
+            if let page, let wall = AccessWallDetector.wall(in: page, requested: request.canonicalURL) { throw wall }
             throw ResolverError.mediaMissing
         }
         if verified.count < usable.count {

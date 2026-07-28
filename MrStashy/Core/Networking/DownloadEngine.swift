@@ -60,6 +60,10 @@ private final class DownloadCoordinator: NSObject, URLSessionDownloadDelegate, @
     private let lock = NSLock()
     private var continuation: CheckedContinuation<HTTPURLResponse, Error>?
     private var task: URLSessionDownloadTask?
+    /// Set when cancellation arrives before the task exists. `onCancel` fires at most once, so
+    /// without this flag a cancellation landing in that window is lost and the transfer runs to
+    /// completion after the queue row already reads Cancelled.
+    private var isCancelled = false
     private var moveError: Error?
     private var lastReport = Date.distantPast
     /// Reporting on every callback would thrash SwiftUI; a quarter second is well under the
@@ -76,6 +80,11 @@ private final class DownloadCoordinator: NSObject, URLSessionDownloadDelegate, @
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HTTPURLResponse, Error>) in
                 lock.lock()
+                if isCancelled {
+                    lock.unlock()
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
                 self.continuation = continuation
                 let downloadTask = session.downloadTask(with: request)
                 self.task = downloadTask
@@ -84,9 +93,10 @@ private final class DownloadCoordinator: NSObject, URLSessionDownloadDelegate, @
             }
         } onCancel: {
             lock.lock()
-            let cancelled = task
+            isCancelled = true
+            let running = task
             lock.unlock()
-            cancelled?.cancel()
+            running?.cancel()
         }
     }
 

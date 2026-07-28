@@ -197,7 +197,13 @@ struct LibraryView: View {
     /// Everything that changes what the list should show, including the saved-post count so a
     /// finished download refreshes the rows without a second code path.
     private var refreshKey: String {
-        "\(mode.rawValue)|\(query)|\(appState.libraryPosts.count)|\(appState.libraryPosts.first?.id.uuidString ?? "")"
+        // Content, not just the count: an archive that is overwritten keeps its identifier, so
+        // a key built from identity alone would leave the row showing stale values.
+        let fingerprint = appState.libraryPosts
+            .map { "\($0.id.uuidString)-\($0.mediaCount)-\(Int($0.savedAt.timeIntervalSince1970))" }
+            .joined(separator: ",")
+            .hashValue
+        return "\(mode.rawValue)|\(query)|\(fingerprint)"
     }
 
     private func refreshEntries() async {

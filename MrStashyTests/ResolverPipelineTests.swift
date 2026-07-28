@@ -252,6 +252,57 @@ struct ResolverPipelineTests {
         #expect(post.media[1].duration == 12)
     }
 
+    // MARK: - On-disk naming
+
+    /// The extension is how iOS types a local file, so it decides whether the archived media
+    /// plays and whether Photos accepts it. Signed CDN addresses — the normal TikTok case —
+    /// carry no path extension, and naming those `.bin` silently broke both.
+    @Test func savedFilesAreNamedFromWhatTheServerSaysTheyAre() throws {
+        let signed = try #require(URL(string: "https://v16-webapp.tiktok.com/video/tos/alisg/abc/?a=1988&bt=2188"))
+        #expect(MediaFileExtension.resolve(contentType: "video/mp4", sourceURL: signed, type: .video) == "mp4")
+        #expect(MediaFileExtension.resolve(contentType: "video/mp4; charset=utf-8", sourceURL: signed, type: .video) == "mp4")
+        #expect(MediaFileExtension.resolve(contentType: "image/webp", sourceURL: signed, type: .photo) == "webp")
+
+        // No declared type at all still must not produce `bin`.
+        #expect(MediaFileExtension.resolve(contentType: "", sourceURL: signed, type: .video) == "mp4")
+        #expect(MediaFileExtension.resolve(contentType: "application/octet-stream", sourceURL: signed, type: .photo) == "jpg")
+        #expect(MediaFileExtension.resolve(contentType: "", sourceURL: signed, type: .audio) == "m4a")
+        #expect(MediaFileExtension.resolve(contentType: "", sourceURL: signed, type: .gif) == "gif")
+    }
+
+    @Test func aPlainAddressKeepsItsOwnExtensionWhenTheServerIsSilent() throws {
+        let plain = try #require(URL(string: "https://cdn.example.com/clip.mov"))
+        #expect(MediaFileExtension.resolve(contentType: "", sourceURL: plain, type: .video) == "mov")
+    }
+
+    /// ISO base media and RIFF both carry video, images and audio, so the container alone
+    /// cannot verify a video. A WebP or an audio-only M4A must not pass as one.
+    @Test func containerFamiliesAreDistinguishedByBrandNotJustHeader() throws {
+        let webp = try temporaryFile(Data("RIFF".utf8) + Data([0x24, 0x00, 0x00, 0x00]) + Data("WEBP".utf8))
+        let audioOnly = try temporaryFile(Data([0, 0, 0, 0x18]) + Data("ftyp".utf8) + Data("M4A ".utf8))
+        let realVideo = try temporaryFile(Data([0, 0, 0, 0x18]) + Data("ftyp".utf8) + Data("isom".utf8))
+        defer { for url in [webp, audioOnly, realVideo] { try? FileManager.default.removeItem(at: url) } }
+
+        #expect(throws: ResolverError.self) { try MediaIntegrityVerifier.validate(file: webp, type: .video) }
+        #expect(throws: ResolverError.self) { try MediaIntegrityVerifier.validate(file: audioOnly, type: .video) }
+        try MediaIntegrityVerifier.validate(file: realVideo, type: .video)
+        try MediaIntegrityVerifier.validate(file: webp, type: .photo)
+    }
+
+    /// A pasted address is not length-checked upstream, and an absurd run of digits used to
+    /// reach an `Int` conversion that traps.
+    @Test func anAbsurdlyLongPostIdentifierDoesNotTrap() {
+        #expect(XSyndicationToken.value(for: String(repeating: "9", count: 40)) == "a")
+        #expect(XSyndicationToken.value(for: "not-a-number") == "a")
+        #expect(!XSyndicationToken.value(for: "1349129669258448897").isEmpty)
+    }
+
+    private func temporaryFile(_ data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
     // MARK: - Signed addresses
 
     @Test func anExpiredSignedAddressIsRecognisedBeforeItIsDownloaded() throws {

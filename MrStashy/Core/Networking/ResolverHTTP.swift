@@ -242,6 +242,10 @@ struct URLSessionMediaProber: MediaProbing {
         request.applyProfile(.browser, timeout: 12)
         guard let (data, response) = try? await client.data(for: request) else { return nil }
         guard (200 ... 299).contains(response.statusCode) else { return nil }
+        // A host that ignores `Range` answers 200 with the whole file. Rejecting an oversized
+        // one keeps a rejected candidate from costing a full download; 206 means the range was
+        // honoured and the length header describes the whole file, which is what we want.
+        if method == "GET", response.statusCode == 200, data.count > 4 * 1_024 * 1_024 { return nil }
         // Some hosts answer `HEAD` with 200 and no type at all, which proves nothing; fall
         // through to the ranged read rather than accepting an address on that basis.
         let contentType = response.value(forHTTPHeaderField: "Content-Type")

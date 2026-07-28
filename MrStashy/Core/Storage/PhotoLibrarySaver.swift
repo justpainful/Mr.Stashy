@@ -22,7 +22,12 @@ enum PhotoLibrarySaver {
     }
 
     private static func requestAddOnlyAuthorization() async -> PHAuthorizationStatus {
-        await withCheckedContinuation { continuation in
+        // Once the choice has been made, answer from it directly. Suspending on the system
+        // prompt here holds a download permit, which parked every other queued transfer behind
+        // an alert the person may not have noticed.
+        let existing = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        guard existing == .notDetermined else { return existing }
+        return await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in continuation.resume(returning: status) }
         }
     }

@@ -7,9 +7,14 @@ struct ResultsView: View {
     @State private var selectedMediaIDs: Set<UUID>
     @State private var showTextCard = false
     @State private var pendingSaveMode: QueueItem.SaveMode?
-    /// Set once the post has been queued, so a second tap cannot enqueue the same archive
-    /// twice and overwrite the first save's directory while it is still being written.
-    @State private var queuedMode: QueueItem.SaveMode?
+
+    /// Whether this post is already in the queue. Derived from the queue rather than held in
+    /// view state, so it survives navigating away and back — and so it clears again when a save
+    /// fails, instead of leaving both buttons permanently disabled.
+    private var queuedItem: QueueItem? {
+        appState.queueItems.first { $0.post.id == post.id && !$0.stage.isFinished }
+    }
+    private var queuedMode: QueueItem.SaveMode? { queuedItem?.mode }
 
     init(post: ResolvedPost) {
         self.post = post
@@ -183,7 +188,6 @@ struct ResultsView: View {
         case .fullPost: appState.enqueueFullPost(post, selectedIDs: selectedMediaIDs, quality: quality)
         case .mediaOnly: appState.enqueueMediaOnly(post, selectedIDs: selectedMediaIDs, quality: quality)
         }
-        queuedMode = mode
     }
 }
 

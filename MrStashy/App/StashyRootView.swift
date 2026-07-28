@@ -22,9 +22,9 @@ struct StashyRootView: View {
             if systemReduceMotion || appState.settings.reduceMotion { transaction.animation = nil }
         }
         .onOpenURL(perform: appState.handleOpenURL)
-        // The lookup bundle is process-wide, so it is set before the first screen renders and
-        // again whenever the choice changes.
-        .task(id: appState.settings.language) { L10n.setLanguage(appState.settings.language) }
+        // Text is read through `L10n`, which is not observable, so changing the language has to
+        // rebuild the tree rather than rely on a value dependency that does not exist.
+        .id(appState.settings.language)
         .alert(
             L10n.value("error.title"),
             isPresented: Binding(get: { appState.lastError != nil }, set: { if !$0 { appState.lastError = nil } })

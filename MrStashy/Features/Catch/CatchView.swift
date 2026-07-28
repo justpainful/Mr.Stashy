@@ -22,17 +22,25 @@ struct CatchView: View {
         .navigationTitle(L10n.value("tab.catch"))
         // A link shared from another app can arrive while this screen is already visible, so it
         // is consumed whenever the shared list changes, not only when the view first appears.
-        .task(id: appState.pendingLinks) { consumeSharedLink() }
+        // The busy flag is part of the key so the next link is taken when the current one
+        // settles: consuming them all at once resolved five links concurrently and showed one.
+        .task(id: sharedLinkKey) { await consumeSharedLink() }
         .sheet(isPresented: $showCapabilities) { PlatformDiagnosticsSheet() }
         .sheet(item: $selectedSource) { platform in
             PlatformPasteSheet(platform: platform, urlText: $urlText)
         }
     }
 
-    private func consumeSharedLink() {
-        guard let link = appState.takeNextPendingLink() else { return }
+    private var sharedLinkKey: String {
+        "\(appState.pendingLinks.count)-\(isResolving)"
+    }
+
+    /// Takes one shared link at a time. Every link stays in the queue until it is its turn, so
+    /// a five-link share is inspected one after another instead of four being silently lost.
+    private func consumeSharedLink() async {
+        guard !isResolving, let link = appState.takeNextPendingLink() else { return }
         urlText = link.absoluteString
-        Task { await appState.resolve(link.absoluteString) }
+        await appState.resolve(link.absoluteString)
     }
 
     private var captureForm: some View {
