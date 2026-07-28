@@ -2,10 +2,14 @@ import SwiftUI
 
 struct ResultsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     let post: ResolvedPost
     @State private var selectedMediaIDs: Set<UUID>
     @State private var showTextCard = false
     @State private var pendingSaveMode: QueueItem.SaveMode?
+    /// Set once the post has been queued, so a second tap cannot enqueue the same archive
+    /// twice and overwrite the first save's directory while it is still being written.
+    @State private var queuedMode: QueueItem.SaveMode?
 
     init(post: ResolvedPost) {
         self.post = post
@@ -22,26 +26,63 @@ struct ResultsView: View {
                         Label(post.canonicalURL.host ?? post.canonicalURL.absoluteString, systemImage: "link")
                             .font(.caption)
                     }
+                    ForEach(Array(post.warnings.enumerated()), id: \.offset) { _, warning in
+                        ResolverWarningRow(text: warning)
+                    }
                     if !post.text.isEmpty { Text(post.text).textSelection(.enabled).font(.body) }
                     if let quote = post.quotedPost { QuotedPostView(quote: quote) }
                     mediaList
                     actionBar
+                    if let queuedMode { savedConfirmation(queuedMode) }
                 }
                 .padding(20)
             }
         }
-        .navigationTitle(String(localized: "results.title"))
+        .navigationTitle(L10n.value("results.title"))
         .sheet(isPresented: $showTextCard) { TextCardComposer(post: post) }
-        .confirmationDialog(String(localized: "results.quality.title"), isPresented: Binding(
+        .confirmationDialog(L10n.value("results.quality.title"), isPresented: Binding(
             get: { pendingSaveMode != nil },
             set: { if !$0 { pendingSaveMode = nil } }
         )) {
-            Button(String(localized: "settings.quality.original")) { enqueuePending(quality: .original) }
-            Button(String(localized: "settings.quality.dataSaver")) { enqueuePending(quality: .dataSaver) }
-            Button(String(localized: "action.cancel"), role: .cancel) { pendingSaveMode = nil }
+            Button(L10n.value("settings.quality.original")) { enqueuePending(quality: .original) }
+            Button(L10n.value("settings.quality.dataSaver")) { enqueuePending(quality: .dataSaver) }
+            Button(L10n.value("action.cancel"), role: .cancel) { pendingSaveMode = nil }
         } message: {
-            Text(String(localized: "results.quality.message"))
+            Text(L10n.value("results.quality.message"))
         }
+    }
+
+    /// Saving happens in the queue, so the screen has to say the save started; otherwise the
+    /// only feedback is a tab badge the person may never look at.
+    private func savedConfirmation(_ mode: QueueItem.SaveMode) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(L10n.value(mode == .fullPost ? "results.queued.fullPost" : "results.queued.mediaOnly"))
+                    .font(.subheadline.weight(.semibold))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(StashyTheme.green)
+            }
+            HStack(spacing: 12) {
+                Button {
+                    appState.selectedTab = .queue
+                    dismiss()
+                } label: {
+                    Label(L10n.value("results.openQueue"), systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.glassProminent)
+                Button {
+                    appState.selectedTab = .library
+                    dismiss()
+                } label: {
+                    Label(L10n.value("tab.library"), systemImage: "books.vertical")
+                }
+                .buttonStyle(.glass)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular.tint(StashyTheme.green.opacity(0.16)), in: .rect(cornerRadius: 20))
+        .accessibilityIdentifier("results.queued")
     }
 
     private var authorBlock: some View {
@@ -63,7 +104,7 @@ struct ResultsView: View {
             .clipShape(.circle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName).font(.headline)
-                if let username = post.author.username { Text("@\(username)").font(.subheadline).foregroundStyle(.secondary) }
+                if let username = post.author.username { Text("@\(username)").font(.subheadline).foregroundStyle(StashyTheme.inkSecondary) }
                 HStack(spacing: 5) {
                     PlatformIcon(platform: post.platform, size: 17)
                     Text(L10n.value(post.platform.titleKey))
@@ -71,7 +112,7 @@ struct ResultsView: View {
                 .font(.caption.weight(.medium))
             }
             Spacer()
-            if let date = post.createdAt { Text(date, style: .date).font(.caption).foregroundStyle(.secondary) }
+            if let date = post.createdAt { Text(date, style: .date).font(.caption).foregroundStyle(StashyTheme.inkSecondary) }
         }
         .accessibilityElement(children: .combine)
     }
@@ -89,8 +130,9 @@ struct ResultsView: View {
     private var actionBar: some View {
         StashyGlassBar {
             saveButtons
-            Button { showTextCard = true } label: { Label(String(localized: "results.textCard"), systemImage: "text.badge.plus") }
+            Button { showTextCard = true } label: { Label(L10n.value("results.textCard"), systemImage: "text.badge.plus") }
                 .buttonStyle(.glass)
+                .disabled(post.text.isEmpty)
                 .accessibilityIdentifier("results.textCard")
         }
     }
@@ -107,20 +149,22 @@ struct ResultsView: View {
 
     private var fullPostButton: some View {
         Button { requestSave(.fullPost) } label: {
-            Label(String(localized: "results.saveFull"), systemImage: "archivebox")
+            Label(L10n.value("results.saveFull"), systemImage: "archivebox")
         }
-        .disabled(selectedMediaIDs.isEmpty && !post.media.isEmpty)
+        .disabled(queuedMode != nil || (selectedMediaIDs.isEmpty && !post.media.isEmpty))
         .accessibilityIdentifier("results.saveFull")
     }
 
     private var mediaOnlyButton: some View {
         Button { requestSave(.mediaOnly) } label: {
-            Label(String(localized: "results.saveMedia"), systemImage: "arrow.down.to.line")
+            Label(L10n.value("results.saveMedia"), systemImage: "arrow.down.to.line")
         }
-        .disabled(selectedMediaIDs.isEmpty)
+        .disabled(queuedMode != nil || selectedMediaIDs.isEmpty)
+        .accessibilityIdentifier("results.saveMedia")
     }
 
     private func requestSave(_ mode: QueueItem.SaveMode) {
+        guard queuedMode == nil else { return }
         if appState.settings.quality == .askEveryTime {
             pendingSaveMode = mode
         } else {
@@ -139,6 +183,7 @@ struct ResultsView: View {
         case .fullPost: appState.enqueueFullPost(post, selectedIDs: selectedMediaIDs, quality: quality)
         case .mediaOnly: appState.enqueueMediaOnly(post, selectedIDs: selectedMediaIDs, quality: quality)
         }
+        queuedMode = mode
     }
 }
 
@@ -146,13 +191,14 @@ private struct MediaSelectionRow: View {
     let media: ResolvedMedia
     let isSelected: Bool
     let action: () -> Void
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: media.type.systemImage).font(.title2).foregroundStyle(StashyTheme.green).frame(width: 34)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.value("media.\(media.type.rawValue)")).font(.headline)
-                    Text(metadata).font(.caption).foregroundStyle(.secondary)
+                    Text(metadata).font(.caption).foregroundStyle(StashyTheme.inkSecondary)
                     if let variant = media.highestVariant {
                         Text(variant.qualityLabel).font(.caption2.weight(.semibold)).foregroundStyle(StashyTheme.green)
                     }
@@ -166,10 +212,25 @@ private struct MediaSelectionRow: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
-        .accessibilityLabel(Text(String(localized: "media.selection")))
+        // Each row names the item it belongs to and reports its own selected state, so the
+        // list is navigable rather than a run of identically labelled buttons.
+        .accessibilityLabel(Text(L10n.format(
+            "media.selection.item",
+            Int64(media.orderIndex + 1),
+            L10n.value("media.\(media.type.rawValue)")
+        )))
+        .accessibilityValue(Text(metadata))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier("results.media.\(media.orderIndex)")
     }
+
     private var metadata: String {
-        var values = [[media.width, media.height].compactMap { $0 }.count == 2 ? "\(media.width ?? 0) × \(media.height ?? 0)" : String(localized: "media.unknownDimensions")]
+        var values: [String] = []
+        if let width = media.width, let height = media.height {
+            values.append("\(width) × \(height)")
+        } else {
+            values.append(L10n.value("media.unknownDimensions"))
+        }
         if let duration = media.duration {
             values.append(Duration.seconds(duration).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
         }
@@ -190,7 +251,8 @@ struct QuotedPostView: View {
             Text(quote.author.displayName).font(.subheadline.weight(.semibold))
             Text(quote.text).font(.subheadline)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(StashyTheme.charcoal.opacity(0.18), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(StashyTheme.hairline, lineWidth: 1))
     }
 }

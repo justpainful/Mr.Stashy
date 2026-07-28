@@ -7,16 +7,18 @@ enum Platform: String, Codable, CaseIterable, Sendable, Identifiable {
     var hostnames: [String] {
         switch self {
         case .tikTok: ["tiktok.com"]
-        case .instagram: ["instagram.com", "instagr.am"]
+        case .instagram: ["instagram.com", "instagr.am", "ig.me"]
         case .x: ["x.com", "twitter.com"]
-        case .pinterest: ["pinterest.com", "pin.it"]
-        case .snapchat: ["snapchat.com"]
+        // Pinterest publishes country domains, and `pin.it` is its own share shortener.
+        case .pinterest: ["pinterest.com", "pin.it", "pinterest.co.uk", "pinterest.ca", "pinterest.fr", "pinterest.de"]
+        case .snapchat: ["snapchat.com", "story.snapchat.com"]
         case .kick: ["kick.com"]
-        case .threads: ["threads.net"]
-        case .tumblr: ["tumblr.com"]
-        case .imgur: ["imgur.com"]
-        case .youTube: ["youtube.com", "youtu.be"]
-        case .discord: ["discord.com"]
+        // Threads moved to `threads.com`; links shared before the move still use `threads.net`.
+        case .threads: ["threads.net", "threads.com"]
+        case .tumblr: ["tumblr.com", "tmblr.co"]
+        case .imgur: ["imgur.com", "imgur.io"]
+        case .youTube: ["youtube.com", "youtu.be", "youtube-nocookie.com"]
+        case .discord: ["discord.com", "discord.gg"]
         case .directMedia: []
         }
     }
@@ -131,6 +133,10 @@ enum ResolverError: Error, Equatable, Sendable, LocalizedError {
     case invalidURL, unsupportedURL, contentNotFound, contentPrivate, authenticationRequired, rateLimited, platformChanged, mediaMissing, qualityUnavailable, expiredMediaURL, networkFailure, invalidResponse, verificationFailure
 
     var errorDescription: String? { L10n.value("resolver.error.\(self)") }
+
+    /// What the person can actually do about it. A failure that only states what went wrong
+    /// leaves the screen a dead end.
+    var recoveryKey: String { "resolver.recovery.\(self)" }
 }
 
 struct UserVisibleError: Identifiable, Equatable {
@@ -148,6 +154,28 @@ struct QueueItem: Identifiable, Equatable {
             case .cancelled: "queue.stage.cancelled"
             default: "queue.stage.\(String(describing: self))"
             }
+        }
+
+        /// A stage the queue will not leave on its own, so its row can be cleared.
+        var isFinished: Bool {
+            switch self {
+            case .completed, .cancelled, .failed: true
+            default: false
+            }
+        }
+
+        var canRetry: Bool {
+            switch self {
+            case .failed, .cancelled: true
+            default: false
+            }
+        }
+
+        /// The message a failure carries, so a caller can present it in full rather than
+        /// squeezing it into a status caption.
+        var failureMessage: String? {
+            if case .failed(let message) = self { return message }
+            return nil
         }
     }
     var id = UUID()
@@ -215,10 +243,33 @@ struct ArchivedMediaRecord: Codable, Sendable {
     var variant: MediaVariant?
 }
 
-enum SupportStatus: String, Codable, Sendable { case passing, failing, blocked, notShipped }
+/// What Stashy can honestly claim for one source.
+/// `limited` exists because "works" and "does not work" are both wrong for a source that
+/// publishes a post's text and cover image but never publishes its video file. Collapsing that
+/// into either answer is what previously made a working capture look like a failure.
+enum SupportStatus: String, Codable, Sendable, CaseIterable {
+    case passing, limited, needsCredential, failing, blocked, notShipped
+
+    var isUsable: Bool {
+        switch self {
+        case .passing, .limited, .needsCredential: true
+        case .failing, .blocked, .notShipped: false
+        }
+    }
+}
+
 struct PlatformCapability: Codable, Hashable, Sendable, Identifiable {
     var platform: Platform
     var status: SupportStatus
     var evidence: String
+    /// The credential a person can supply themselves to lift this source to a full capture.
+    var unlockCredential: ResolverCredential?
     var id: Platform { platform }
+
+    init(platform: Platform, status: SupportStatus, evidence: String, unlockCredential: ResolverCredential? = nil) {
+        self.platform = platform
+        self.status = status
+        self.evidence = evidence
+        self.unlockCredential = unlockCredential
+    }
 }

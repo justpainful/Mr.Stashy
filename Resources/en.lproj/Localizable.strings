@@ -217,3 +217,69 @@
 "settings.deleteLibrary.title" = "Delete every local archive?";
 "settings.deleteLibrary.confirm" = "Delete all archives";
 "settings.deleteLibrary.message" = "This permanently removes every Stashy archive and downloaded media from this device. Photos you saved separately are not affected.";
+
+/* Added: honest capability reporting, recoverable errors, and credential management. */
+"notice.title" = "Heads up";
+"catch.retry" = "Try again";
+"catch.startOver" = "Start over";
+"catch.source.accessibility" = "%@, support: %@";
+
+"support.limited" = "Partly supported";
+"support.needsCredential" = "Needs your access";
+
+"resolver.warning.brandingOnly" = "This page only published its own share image, so the saved picture may not be the post's own media.";
+"resolver.warning.candidateLimit" = "This page listed more media than Stashy checks at once. The first %lld item(s) were kept.";
+"resolver.warning.partialMedia" = "Saved %1$lld of %2$lld item(s). The rest were no longer being served.";
+"resolver.warning.tikTokCoverOnly" = "TikTok did not publish a playable file for this post, so the cover image was saved instead of the video.";
+"resolver.warning.youTubeCoverOnly" = "YouTube publishes no downloadable file address. The title, channel, and cover image were saved; the video stream was not.";
+"resolver.warning.adaptiveStream" = "This clip is published as an adaptive stream rather than a file, so its poster frame was saved.";
+"archive.warning.itemSkipped" = "Item %1$lld was skipped: %2$@";
+
+"queue.restore.changed" = "A queued post on %@ no longer offers the items you picked, so it was removed from the queue.";
+"queue.remove" = "Remove";
+"queue.clearFinished" = "Clear finished";
+
+"results.queued.fullPost" = "The full post is saving.";
+"results.queued.mediaOnly" = "The selected media is saving.";
+"results.openQueue" = "Open Queue";
+"media.selection.item" = "Item %1$lld, %2$@";
+"library.deletePost" = "Delete whole post";
+
+"settings.sources" = "Sources";
+"settings.platformDiagnostics.body" = "What Stashy can capture from each source, and why. Stashy only reads public pages and the endpoints a source publishes itself.";
+"settings.credentials" = "Your source access";
+"settings.credentials.body" = "If you own developer access to a source, add your own key to capture more of it. Keys are stored in this device's Keychain and never leave it.";
+"settings.credentials.placeholder" = "Paste your key";
+"settings.credentials.save" = "Save key";
+"settings.credentials.remove" = "Remove key";
+"settings.credentials.stored" = "Saved on this device";
+"settings.credentials.unlocks" = "Your own %@ unlocks a fuller capture.";
+
+"credential.xBearerToken" = "X bearer token";
+"credential.xBearerToken.help" = "An app bearer token from your own X developer project.";
+"credential.imgurClientID" = "Imgur client ID";
+"credential.imgurClientID.help" = "A client ID from your own registered Imgur application.";
+"credential.tumblrAPIKey" = "Tumblr API key";
+"credential.tumblrAPIKey.help" = "The consumer key from your own Tumblr application.";
+"credential.pinterestAccessToken" = "Pinterest access token";
+"credential.pinterestAccessToken.help" = "An access token from your own Pinterest developer app.";
+"credential.instagramAccessToken" = "Instagram access token";
+"credential.instagramAccessToken.help" = "A token from your own Instagram Graph API app, for content you are authorised to read.";
+"credential.threadsAccessToken" = "Threads access token";
+"credential.threadsAccessToken.help" = "A token from your own Threads API app, for content you are authorised to read.";
+"credential.tikTokAccessToken" = "TikTok access token";
+"credential.tikTokAccessToken.help" = "A token from your own TikTok developer app.";
+
+"resolver.recovery.invalidURL" = "Check the link and paste the full web address, starting with https.";
+"resolver.recovery.unsupportedURL" = "Open Platform support status to see which sources Stashy can read.";
+"resolver.recovery.contentNotFound" = "The post may have been deleted. Open the link in a browser to check.";
+"resolver.recovery.contentPrivate" = "Only public posts can be archived. Ask the author for a public link.";
+"resolver.recovery.authenticationRequired" = "This source wants an account. Add your own key under Settings › Your source access, or use a public link.";
+"resolver.recovery.rateLimited" = "The source is throttling requests. Wait a minute and try again.";
+"resolver.recovery.platformChanged" = "This source changed its page format. Try a different link, or check for an app update.";
+"resolver.recovery.mediaMissing" = "This page did not publish any media. Try the post's own page rather than a feed or profile.";
+"resolver.recovery.qualityUnavailable" = "No usable file was offered. Try again, or open the post to check it still has media.";
+"resolver.recovery.expiredMediaURL" = "The source's link expired. Inspect the post again to get a fresh one.";
+"resolver.recovery.networkFailure" = "Check your connection and try again.";
+"resolver.recovery.invalidResponse" = "The source answered unexpectedly. Try again in a moment.";
+"resolver.recovery.verificationFailure" = "The file that arrived was not the media it claimed to be, so it was discarded. Try again.";

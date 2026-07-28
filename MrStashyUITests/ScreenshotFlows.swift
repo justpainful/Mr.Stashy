@@ -58,14 +58,17 @@ final class ScreenshotFlows: XCTestCase {
 
         openTab("Settings", in: app)
         capture(app, named: "settings.png")
-        let platformStatus = app.buttons["Platform support status"]
-        while !platformStatus.exists { app.swipeUp() }
+        let platformStatus = app.buttons["settings.platformDiagnostics"]
+        // Bounded: an element that never appears has to fail the test, not hang the run until
+        // the whole job times out with no evidence at all.
+        for _ in 0 ..< 8 where !platformStatus.exists { app.swipeUp() }
+        XCTAssertTrue(platformStatus.waitForExistence(timeout: 5), "Platform support status is unreachable in Settings")
         platformStatus.tap()
         capture(app, named: "discord-disabled.png")
         app.buttons["Done"].tap()
 
         app.terminate()
-        app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "-AppleLanguages", "(ar)", "-AppleLocale", "ar_SA"])
+        app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "--ui-arabic", "-AppleLanguages", "(ar)", "-AppleLocale", "ar_SA"])
         capture(app, named: "ar-catch.png")
         openTab("المكتبة", in: app)
         capture(app, named: "ar-library.png")

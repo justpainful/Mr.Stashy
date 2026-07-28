@@ -5,6 +5,12 @@ actor ArchiveStore {
     private let fileManager = FileManager.default
     private let database = LibraryDatabase()
     private let downloadEngine = DownloadEngine()
+    /// Two saves of the same post would move two temporary folders onto one destination and
+    /// destroy each other's work, so a post can only be written once at a time.
+    private var savesInFlight: Set<UUID> = []
+    /// Checksum-to-file map, rebuilt only when the library changes. Rebuilding it per file made
+    /// every download walk the whole library.
+    private var checksumIndex: [String: URL]?
 
     private var root: URL {
         let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -73,6 +79,10 @@ actor ArchiveStore {
         return try JSONDecoder.stashy.decode(ArchiveManifest.self, from: Data(contentsOf: url))
     }
 
+    /// Saves a post and returns anything the person should know about the result, such as an
+    /// item the source stopped serving partway through. A single unreachable item no longer
+    /// discards the whole capture: the archive keeps what it did get, and says what it missed.
+    @discardableResult
     func save(
         post: ResolvedPost,
         selectedMediaIDs: Set<UUID>,
@@ -80,45 +90,92 @@ actor ArchiveStore {
         allowCellular: Bool = true,
         quality: UserSettings.Quality = .original,
         onProgress: @escaping @Sendable (ArchiveSaveProgress) async -> Void = { _ in }
-    ) async throws {
+    ) async throws -> [String] {
         try Task.checkCancellation()
+        guard savesInFlight.insert(post.id).inserted else { throw ResolverError.verificationFailure }
+        defer { savesInFlight.remove(post.id) }
+
         try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
         let finalDirectory = postsRoot.appendingPathComponent(post.id.uuidString, isDirectory: true)
         let temporary = root.appendingPathComponent(".tmp-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: temporary.appendingPathComponent("media", isDirectory: true), withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: temporary) }
+
         let selectedMedia = post.media.sorted(by: { $0.orderIndex < $1.orderIndex }).filter { selectedMediaIDs.contains($0.id) }
         var records: [ArchivedMediaRecord] = []
+        var warnings = post.warnings
+        var lastFailure: Error?
+        // A total is only offered when every selected item published a size; a partial total
+        // would make the remaining-time estimate confidently wrong.
+        let estimates = selectedMedia.compactMap { selectedVariant(for: $0, quality: quality)?.estimatedBytes }
+        let overallExpected: Int64? = estimates.count == selectedMedia.count ? estimates.reduce(0, +) : nil
+        var completedBefore: Int64 = 0
+
         for (selectedIndex, item) in selectedMedia.enumerated() {
             try Task.checkCancellation()
-            guard let variant = selectedVariant(for: item, quality: quality) else { throw ResolverError.qualityUnavailable }
+            guard let variant = selectedVariant(for: item, quality: quality) else {
+                lastFailure = ResolverError.qualityUnavailable
+                warnings.append(L10n.format("archive.warning.itemSkipped", Int64(item.orderIndex + 1), ResolverError.qualityUnavailable.localizedDescription))
+                continue
+            }
             let destinationName = "\(item.orderIndex)-\(item.id.uuidString).\(variant.url.pathExtension.isEmpty ? "bin" : variant.url.pathExtension)"
             let destination = temporary.appendingPathComponent("media").appendingPathComponent(destinationName)
-            let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
-                await onProgress(.init(mediaIndex: selectedIndex, mediaCount: selectedMedia.count, completedBytes: byteProgress.completedBytes, expectedBytes: byteProgress.expectedBytes))
+            do {
+                let priorBytes = completedBefore
+                let checksum = try await downloadAndVerify(variant: variant, type: item.type, destination: destination, allowCellular: allowCellular) { byteProgress in
+                    await onProgress(.init(
+                        mediaIndex: selectedIndex,
+                        mediaCount: selectedMedia.count,
+                        completedBytes: byteProgress.completedBytes,
+                        expectedBytes: byteProgress.expectedBytes,
+                        overallCompletedBytes: priorBytes + byteProgress.completedBytes,
+                        overallExpectedBytes: overallExpected
+                    ))
+                }
+                deduplicateFile(at: destination, checksum: checksum)
+                let archivedVariant = variant.safeArchiveCopy
+                records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: checksum, variant: archivedVariant))
+                let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+                completedBefore += completedBytes
+                await onProgress(.init(
+                    mediaIndex: selectedIndex + 1,
+                    mediaCount: selectedMedia.count,
+                    completedBytes: completedBytes,
+                    expectedBytes: completedBytes,
+                    overallCompletedBytes: completedBefore,
+                    overallExpectedBytes: overallExpected
+                ))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                try? fileManager.removeItem(at: destination)
+                lastFailure = error
+                warnings.append(L10n.format("archive.warning.itemSkipped", Int64(item.orderIndex + 1), error.localizedDescription))
             }
-            deduplicateFile(at: destination, checksum: checksum)
-            let archivedVariant = variant.safeArchiveCopy
-            records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: checksum, variant: archivedVariant))
-            let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-            await onProgress(.init(mediaIndex: selectedIndex + 1, mediaCount: selectedMedia.count, completedBytes: completedBytes, expectedBytes: completedBytes))
         }
         try Task.checkCancellation()
+
+        // Nothing was saved, so there is no archive to keep and the real reason is reported.
+        if records.isEmpty, !selectedMedia.isEmpty { throw lastFailure ?? ResolverError.mediaMissing }
+
         let manifest = ArchiveManifest(archiveID: post.id, platform: post.platform, canonicalURL: post.canonicalURL, sourceURL: post.originalURL, author: post.author, text: mediaOnly ? "" : post.text, timestamp: post.createdAt, quotedPost: mediaOnly ? nil : post.quotedPost, orderedMedia: records, resolverVersion: post.resolverVersion, savedAt: .now)
         let summary = ArchivedPostSummary(id: post.id, platform: post.platform, author: post.author.displayName, text: mediaOnly ? "" : post.text, mediaCount: records.count, savedAt: manifest.savedAt, localFolderName: post.id.uuidString)
         try JSONEncoder.stashy.encode(manifest).write(to: temporary.appendingPathComponent("manifest.json"), options: .atomic)
         try JSONEncoder.stashy.encode(summary).write(to: temporary.appendingPathComponent("summary.json"), options: .atomic)
         if fileManager.fileExists(atPath: finalDirectory.path) { try fileManager.removeItem(at: finalDirectory) }
         try fileManager.moveItem(at: temporary, to: finalDirectory)
+        checksumIndex = nil
         // The on-disk manifest is the source of truth. If the recoverable search index is
         // temporarily unavailable, keep a completed archive rather than misreporting failure.
         try? await database.upsert(summary)
+        return warnings
     }
 
     func deleteArchive(id: UUID) async throws {
         let directory = postsRoot.appendingPathComponent(id.uuidString, isDirectory: true)
         guard directory.standardizedFileURL.path.hasPrefix(postsRoot.standardizedFileURL.path) else { throw ResolverError.verificationFailure }
         if fileManager.fileExists(atPath: directory.path) { try fileManager.removeItem(at: directory) }
+        checksumIndex = nil
         try await database.remove(archiveID: id)
     }
 
@@ -194,6 +251,7 @@ actor ArchiveStore {
         try JSONEncoder.stashy.encode(manifest).write(to: temporary.appendingPathComponent("manifest.json"), options: .atomic)
         try JSONEncoder.stashy.encode(summary).write(to: temporary.appendingPathComponent("summary.json"), options: .atomic)
         try fileManager.moveItem(at: temporary, to: finalDirectory)
+        checksumIndex = nil
         try? await database.upsert(summary)
         return summary
     }
@@ -238,6 +296,7 @@ actor ArchiveStore {
         let finalDirectory = postsRoot.appendingPathComponent(manifest.archiveID.uuidString, isDirectory: true)
         guard !fileManager.fileExists(atPath: finalDirectory.path) else { throw StashPackageError.duplicateArchive }
         try fileManager.moveItem(at: importedDirectory, to: finalDirectory)
+        checksumIndex = nil
         try? await database.upsert(summary)
         return summary
     }
@@ -290,16 +349,29 @@ actor ArchiveStore {
     }
 
     private func existingMediaURL(checksum: String) -> URL? {
+        if checksumIndex == nil { checksumIndex = buildChecksumIndex() }
+        guard let url = checksumIndex?[checksum] else { return nil }
+        // The index outlives individual deletions, so a stale entry is verified before use.
+        guard fileManager.fileExists(atPath: url.path) else {
+            checksumIndex?[checksum] = nil
+            return nil
+        }
+        return url
+    }
+
+    private func buildChecksumIndex() -> [String: URL] {
+        var index: [String: URL] = [:]
         for summary in fileSummaries() {
             guard let manifest = try? loadManifest(id: summary.id) else { continue }
-            for record in manifest.orderedMedia where record.checksumSHA256 == checksum {
-                guard let filename = record.localFilename,
+            for record in manifest.orderedMedia {
+                guard let checksum = record.checksumSHA256, index[checksum] == nil,
+                      let filename = record.localFilename,
                       let url = localMediaURL(archiveID: summary.id, filename: filename)
                 else { continue }
-                return url
+                index[checksum] = url
             }
         }
-        return nil
+        return index
     }
 
     private func downloadAndVerify(
@@ -309,23 +381,31 @@ actor ArchiveStore {
         allowCellular: Bool,
         onProgress: @escaping @Sendable (DownloadByteProgress) async -> Void
     ) async throws -> String {
+        if let expiry = variant.expirationDate, expiry < .now { throw ResolverError.expiredMediaURL }
         var request = URLRequest(url: variant.url)
         request.timeoutInterval = 60
         for (key, value) in variant.headers { request.setValue(value, forHTTPHeaderField: key) }
         let http = try await downloadEngine.download(request: request, destination: destination, allowCellular: allowCellular, onProgress: onProgress)
         let contentType = http.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
-        guard !contentType.contains("text/html"), !contentType.contains("application/json") else { throw ResolverError.verificationFailure }
+        for rejected in ["text/html", "application/json", "text/plain", "application/xml", "mpegurl"] where contentType.contains(rejected) {
+            throw ResolverError.verificationFailure
+        }
         try MediaIntegrityVerifier.validate(file: destination, type: type)
         return try SHA256.fileDigest(destination)
     }
 
 }
 
+/// Progress for one save. The store reports absolute totals because it is the only place that
+/// knows how many bytes the earlier items already contributed; having the UI accumulate them
+/// was what made the byte counter double-count at every item boundary and then jump backwards.
 struct ArchiveSaveProgress: Sendable {
     var mediaIndex: Int
     var mediaCount: Int
     var completedBytes: Int64
     var expectedBytes: Int64?
+    var overallCompletedBytes: Int64
+    var overallExpectedBytes: Int64?
 }
 
 enum MediaIntegrityVerifier {
@@ -345,13 +425,33 @@ enum MediaIntegrityVerifier {
         if normalizedHeader.starts(with: Data("<html".utf8)) || normalizedHeader.starts(with: Data("<!doctype".utf8)) {
             throw ResolverError.verificationFailure
         }
+        let isISOBaseMedia = header.count >= 8 && header[4 ..< 8] == Data("ftyp".utf8)
+        let isRIFF = header.starts(with: Data("RIFF".utf8))
+        let isMatroska = header.starts(with: [0x1A, 0x45, 0xDF, 0xA3])
         switch type {
         case .photo, .gif:
-            guard header.starts(with: [0xFF, 0xD8]) || header.starts(with: [0x89, 0x50, 0x4E, 0x47]) || header.starts(with: Data("GIF".utf8)) || header.starts(with: Data("RIFF".utf8)) || (header.count >= 8 && header[4...7] == Data("ftyp".utf8)) else { throw ResolverError.verificationFailure }
+            // JPEG, PNG, GIF, RIFF/WebP, HEIC and AVIF (both ISO base media), and BMP.
+            guard header.starts(with: [0xFF, 0xD8])
+                || header.starts(with: [0x89, 0x50, 0x4E, 0x47])
+                || header.starts(with: Data("GIF".utf8))
+                || isRIFF
+                || isISOBaseMedia
+                || header.starts(with: Data("BM".utf8))
+            else { throw ResolverError.verificationFailure }
         case .video:
-            guard header.count >= 8, header[4...7] == Data("ftyp".utf8) else { throw ResolverError.verificationFailure }
+            // MP4/MOV/HEVC share the ISO base media header; WebM and MKV use EBML; a few hosts
+            // still serve AVI inside a RIFF container.
+            guard isISOBaseMedia || isMatroska || isRIFF else { throw ResolverError.verificationFailure }
         case .audio:
-            guard header.starts(with: Data("ID3".utf8)) || header.starts(with: Data("RIFF".utf8)) || (header.count >= 8 && header[4...7] == Data("ftyp".utf8)) else { throw ResolverError.verificationFailure }
+            guard header.starts(with: Data("ID3".utf8))
+                || isRIFF
+                || isISOBaseMedia
+                || isMatroska
+                || header.starts(with: Data("OggS".utf8))
+                || header.starts(with: Data("fLaC".utf8))
+                // A bare MPEG audio frame begins with eleven set sync bits.
+                || (header.count >= 2 && header[0] == 0xFF && (header[1] & 0xE0) == 0xE0)
+            else { throw ResolverError.verificationFailure }
         }
     }
 }

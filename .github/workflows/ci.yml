@@ -29,6 +29,9 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --requirement requirements-dev.txt
       - run: python scripts/verify_assets.py
+      # A localization key that exists in code but not in both languages renders as its own
+      # identifier on screen, which reads as a broken interface. It has to fail the build.
+      - run: python scripts/verify_localization.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

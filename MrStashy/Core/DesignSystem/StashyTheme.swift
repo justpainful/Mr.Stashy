@@ -12,12 +12,34 @@ enum StashyTheme {
     static let darkSurface = Color(red: 0.10, green: 0.09, blue: 0.14)
     static let surface = Color(uiColor: .secondarySystemBackground)
 
+    /// Primary text. Fixed charcoal disappears on the dark background, so the token resolves
+    /// per appearance instead of per call site.
+    static let ink = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.00, green: 0.97, blue: 0.94, alpha: 1)
+            : UIColor(red: 0.14, green: 0.12, blue: 0.18, alpha: 1)
+    })
+
+    /// Secondary text, kept above the 4.5:1 contrast ratio in both appearances.
+    static let inkSecondary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.00, green: 0.97, blue: 0.94, alpha: 0.74)
+            : UIColor(red: 0.14, green: 0.12, blue: 0.18, alpha: 0.70)
+    })
+
+    /// Container borders and field outlines.
+    static let hairline = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.22)
+            : UIColor(red: 0.14, green: 0.12, blue: 0.18, alpha: 0.18)
+    })
+
     static func accent(for theme: UserSettings.Theme) -> Color {
         switch theme {
-        case .studio: return lavender
-        case .citrus: return Color(red: 0.84, green: 0.20, blue: 0.18)
-        case .ember: return Color(red: 0.80, green: 0.16, blue: 0.31)
-        case .ocean: return Color(red: 0.10, green: 0.43, blue: 0.72)
+        case .studio: lavender
+        case .citrus: Color(red: 0.84, green: 0.20, blue: 0.18)
+        case .ember: Color(red: 0.80, green: 0.16, blue: 0.31)
+        case .ocean: Color(red: 0.10, green: 0.43, blue: 0.72)
         }
     }
 
@@ -28,6 +50,17 @@ enum StashyTheme {
         case .citrus: return Color(red: 1.00, green: 0.95, blue: 0.72)
         case .ember: return Color(red: 1.00, green: 0.91, blue: 0.88)
         case .ocean: return Color(red: 0.88, green: 0.95, blue: 0.98)
+        }
+    }
+
+    /// A status colour that stays legible on both backgrounds.
+    static func color(for status: SupportStatus) -> Color {
+        switch status {
+        case .passing: Color(red: 0.16, green: 0.60, blue: 0.36)
+        case .limited: Color(red: 0.78, green: 0.52, blue: 0.05)
+        case .needsCredential: Color(red: 0.10, green: 0.43, blue: 0.72)
+        case .failing, .blocked: pink
+        case .notShipped: Color.secondary
         }
     }
 }
@@ -82,10 +115,12 @@ struct SourceStyle {
 }
 
 extension Platform {
-    static let quickCapturePlatforms: [Platform] = [
-        .tikTok, .instagram, .x, .youTube, .pinterest, .snapchat,
-        .kick, .threads, .tumblr, .imgur, .discord
-    ]
+    /// The sources the Catch screen offers. It is derived from the capability registry so the
+    /// picker can never advertise a source the app has no working adapter for, and never hides
+    /// one that works.
+    static var quickCapturePlatforms: [Platform] {
+        PlatformCapabilityRegistry.usable.map(\.platform)
+    }
 
     var sourceStyle: SourceStyle {
         switch self {
@@ -115,7 +150,6 @@ struct StashyBackground: View {
 }
 
 struct FeatureHeader: View {
-    @Environment(\.colorScheme) private var colorScheme
     let titleKey: String
     let subtitleKey: String
 
@@ -123,11 +157,12 @@ struct FeatureHeader: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(L10n.value(titleKey))
                 .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(colorScheme == .dark ? StashyTheme.cream : StashyTheme.charcoal)
+                .foregroundStyle(StashyTheme.ink)
             Text(L10n.value(subtitleKey))
                 .font(.subheadline)
-                .foregroundStyle(colorScheme == .dark ? StashyTheme.cream.opacity(0.72) : StashyTheme.charcoal.opacity(0.72))
+                .foregroundStyle(StashyTheme.inkSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
     }
 }
@@ -136,9 +171,16 @@ struct StashyGlassBar<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) { content }
-                .padding(10)
-                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            // Buttons wrap instead of truncating, which is what happens to three actions on a
+            // narrow phone or at a large Dynamic Type size.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { content }
+                    .padding(10)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 24))
+                VStack(alignment: .leading, spacing: 10) { content }
+                    .padding(10)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            }
         }
     }
 }
@@ -146,14 +188,20 @@ struct StashyGlassBar<Content: View>: View {
 struct StatusPill: View {
     let title: String
     let color: Color
+
     var body: some View {
-        Label(title, systemImage: "circle.fill")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.primary)
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(color, color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .glassEffect(.regular.tint(color.opacity(0.2)), in: .capsule)
+        Label {
+            Text(title)
+                // The label text has to stay readable; tinting it with the status colour is
+                // what made these pills unreadable against their own background.
+                .foregroundStyle(StashyTheme.ink)
+        } icon: {
+            Image(systemName: "circle.fill").foregroundStyle(color)
+        }
+        .font(.caption.weight(.semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .glassEffect(.regular.tint(color.opacity(0.2)), in: .capsule)
+        .accessibilityElement(children: .combine)
     }
 }

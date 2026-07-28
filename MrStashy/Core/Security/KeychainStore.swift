@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-enum ResolverCredential: String, CaseIterable, Sendable {
+enum ResolverCredential: String, CaseIterable, Codable, Sendable {
     case imgurClientID
     case tumblrAPIKey
     case xBearerToken
@@ -9,6 +9,9 @@ enum ResolverCredential: String, CaseIterable, Sendable {
     case instagramAccessToken
     case threadsAccessToken
     case tikTokAccessToken
+
+    var titleKey: String { "credential.\(rawValue)" }
+    var helpKey: String { "credential.\(rawValue).help" }
 }
 
 enum KeychainStore {

@@ -43,6 +43,19 @@ jobs:
         run: |
           device="$(bash scripts/boot_simulator.sh iphone-14-or-closest)"
           RESULT_BUNDLE=Artifacts/MrStashyBaselineUITests.xcresult bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+      # Packaging happens before the live-source contracts. Those calls depend on third-party
+      # availability from a data-centre address, and sequencing them first meant one flaky
+      # source produced no artifact at all from an otherwise good build.
+      - name: Package unsigned sideload IPA and dSYM
+        run: bash scripts/package_ipa.sh "$SCHEME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MrStashy-unsigned.ipa
+          path: |
+            Artifacts/MrStashy-unsigned.ipa
+            Artifacts/MrStashy-dSYM.zip
+            Artifacts/BuildMetadata.json
+          if-no-files-found: error
       - name: Run release-blocking live platform contracts
         env:
           LIVE_PLATFORM_CONTRACTS: "1"
@@ -54,8 +67,6 @@ jobs:
         run: |
           test -d Artifacts/Screenshots
           ditto -c -k --sequesterRsrc --keepParent Artifacts/Screenshots Artifacts/MrStashy-Screenshots.zip
-      - name: Package unsigned sideload IPA and dSYM
-        run: bash scripts/package_ipa.sh "$SCHEME"
       - name: Install optional signing material
         if: env.HAS_SIGNING_MATERIAL == 'true'
         env:
@@ -124,18 +135,6 @@ jobs:
               --title "Stashy $tag" \
               --notes "Unsigned IPA is provided for local re-signing and sideloading. See Docs/Sideloading.md. Platform support is limited to the attached live contract matrix."
           fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: MrStashy-unsigned.ipa
-          path: Artifacts/MrStashy-unsigned.ipa
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: MrStashy-dSYM.zip
-          path: Artifacts/MrStashy-dSYM.zip
-          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && env.HAS_SIGNING_MATERIAL == 'true'
         with:

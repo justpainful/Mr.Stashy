@@ -25,19 +25,19 @@ struct TextCardComposer: View {
                     .frame(height: 420)
                     .clipShape(RoundedRectangle(cornerRadius: 28))
 
-                    Picker(String(localized: "textCard.template"), selection: $style) {
+                    Picker(L10n.value("textCard.template"), selection: $style) {
                         ForEach(TextCardStyle.allCases) { style in Text(L10n.value(style.titleKey)).tag(style) }
                     }
                     .pickerStyle(.segmented)
 
-                    Picker(String(localized: "textCard.appearance"), selection: $appearance) {
+                    Picker(L10n.value("textCard.appearance"), selection: $appearance) {
                         ForEach(TextCardAppearance.allCases) { appearance in Text(L10n.value(appearance.titleKey)).tag(appearance) }
                     }
                     .pickerStyle(.segmented)
 
-                    Toggle(String(localized: "textCard.includeAuthor"), isOn: $includeAuthor)
-                    Toggle(String(localized: "textCard.includeTimestamp"), isOn: $includeTimestamp)
-                    Toggle(String(localized: "textCard.saveToPhotos"), isOn: $saveToPhotos)
+                    Toggle(L10n.value("textCard.includeAuthor"), isOn: $includeAuthor)
+                    Toggle(L10n.value("textCard.includeTimestamp"), isOn: $includeTimestamp)
+                    Toggle(L10n.value("textCard.saveToPhotos"), isOn: $saveToPhotos)
 
                     Button { Task { await save() } } label: {
                         Label(L10n.value(didSave ? "textCard.saved" : "textCard.save"), systemImage: "square.and.arrow.down")
@@ -47,11 +47,11 @@ struct TextCardComposer: View {
                 }
                 .padding(20)
             }
-            .navigationTitle(String(localized: "textCard.title"))
+            .navigationTitle(L10n.value("textCard.title"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel(Text(String(localized: "action.done")))
+                        .accessibilityLabel(Text(L10n.value("action.done")))
                 }
             }
         }
@@ -158,7 +158,7 @@ struct TextCardCanvas: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
             .accessibilityHidden(true)
         }
-        .accessibilityLabel(Text(String(localized: "textCard.preview")))
+        .accessibilityLabel(Text(L10n.value("textCard.preview")))
     }
 
     private func cardText(size: CGFloat) -> some View {

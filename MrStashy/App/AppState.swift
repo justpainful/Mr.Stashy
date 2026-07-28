@@ -23,9 +23,14 @@ final class AppState {
         }
     }
     var lastError: UserVisibleError?
+    /// A save can finish with something worth saying that is not a failure, such as an item the
+    /// source stopped serving. Those belong in front of the person, not only in the log.
+    var lastNotice: UserVisibleError?
 
     private var activeSaveTasks: [UUID: Task<Void, Never>] = [:]
     private var transferSamples: [UUID: QueueTransferSample] = [:]
+    /// Identifies the newest resolve request so a slower earlier one cannot overwrite it.
+    private var resolveGeneration = 0
     private let pendingQueueStore = PendingQueueStore()
     private let downloadPermits = DownloadPermitPool()
     private let organizationStore = LibraryOrganizationStore()
@@ -62,6 +67,13 @@ final class AppState {
             } ?? [])
         }
         appendPendingLinks(incoming)
+    }
+
+    /// Takes the next shared link. Catch calls this whenever a link arrives, including while it
+    /// is already on screen, so a shared link is never silently dropped.
+    func takeNextPendingLink() -> URL? {
+        guard !pendingLinks.isEmpty else { return nil }
+        return pendingLinks.removeFirst()
     }
 
     func createCollection(named name: String) async {
@@ -127,8 +139,11 @@ final class AppState {
         // from leaking into the subsequent Arabic capture.
         libraryOrganization = LibraryOrganization()
         try? await organizationStore.save(libraryOrganization)
-        let fixture = Self.screenshotPost(isArabic: Locale.preferredLanguages.first?.hasPrefix("ar") == true)
-        if libraryPosts.isEmpty, let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
+        try? await archiveStore.deleteAllArchives()
+        libraryPosts = []
+        let isArabic = arguments.contains("--ui-arabic") || Locale.preferredLanguages.first?.hasPrefix("ar") == true
+        let fixture = Self.screenshotPost(isArabic: isArabic)
+        if let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
             _ = try? await archiveStore.saveTextCard(pngData: data, sourcePost: fixture)
             libraryPosts = await archiveStore.loadSummaries()
         }
@@ -167,28 +182,48 @@ final class AppState {
     }
 #endif
 
+    /// Clears a finished result so the Catch screen can return to its starting state instead of
+    /// showing yesterday's result or error until the app is relaunched.
+    func clearCatchResult() {
+        resolveGeneration &+= 1
+        catchState = .idle
+    }
+
     func resolve(_ rawValue: String) async {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidate = trimmed.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*://"#, options: .regularExpression) == nil ? "https://\(trimmed)" : trimmed
-        guard let url = URL(string: candidate) else {
+        guard !trimmed.isEmpty else {
             catchState = .failed(.invalidURL)
             return
         }
+        let candidate = trimmed.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*://"#, options: .regularExpression) == nil ? "https://\(trimmed)" : trimmed
+        guard let url = URL(string: candidate), url.host != nil else {
+            catchState = .failed(.invalidURL)
+            return
+        }
+        resolveGeneration &+= 1
+        let generation = resolveGeneration
         catchState = .resolving(.checkingLink)
         do {
             _ = try URLCanonicalizer.canonicalize(url)
+            guard generation == resolveGeneration else { return }
             catchState = .resolving(.resolvingPlatform)
             await Task.yield()
+            guard generation == resolveGeneration else { return }
             catchState = .resolving(.findingContent)
             let post = try await resolverRegistry.resolve(url)
+            // A newer inspection started while this one was in flight; its result is the one
+            // the person is waiting for.
+            guard generation == resolveGeneration else { return }
             catchState = .resolving(.inspectingVariants)
             guard !post.media.isEmpty || !post.text.isEmpty else { throw ResolverError.mediaMissing }
             catchState = .resolving(.verifyingQuality)
             guard post.media.allSatisfy({ $0.highestVariant != nil }) else { throw ResolverError.qualityUnavailable }
             catchState = .ready(post)
         } catch let error as ResolverError {
+            guard generation == resolveGeneration else { return }
             catchState = .failed(error)
         } catch {
+            guard generation == resolveGeneration else { return }
             catchState = .failed(.networkFailure)
         }
     }
@@ -220,6 +255,23 @@ final class AppState {
 
     func isQueueItemActive(_ id: UUID) -> Bool {
         activeSaveTasks[id] != nil
+    }
+
+    /// Removes one finished row. A queue that can only ever grow stops being a queue.
+    func removeQueueItem(id: UUID) {
+        guard activeSaveTasks[id] == nil else { return }
+        queueItems.removeAll { $0.id == id }
+        transferSamples[id] = nil
+    }
+
+    func clearFinishedQueueItems() {
+        let finished = queueItems.filter { $0.stage.isFinished && activeSaveTasks[$0.id] == nil }
+        for item in finished { transferSamples[item.id] = nil }
+        queueItems.removeAll { item in finished.contains(where: { $0.id == item.id }) }
+    }
+
+    var hasFinishedQueueItems: Bool {
+        queueItems.contains { $0.stage.isFinished && activeSaveTasks[$0.id] == nil }
     }
 
     private func enqueue(post: ResolvedPost, selectedIDs: Set<UUID>, mode: QueueItem.SaveMode, quality: UserSettings.Quality) {
@@ -263,7 +315,7 @@ final class AppState {
     private func performSave(item: QueueItem, mediaOnly: Bool) async {
         do {
             updateQueueItem(id: item.id, stage: item.selectedMediaIDs.isEmpty ? .creatingArchive : .downloading)
-            try await archiveStore.save(
+            let warnings = try await archiveStore.save(
                 post: item.post,
                 selectedMediaIDs: item.selectedMediaIDs,
                 mediaOnly: mediaOnly,
@@ -272,21 +324,30 @@ final class AppState {
             ) { [weak self] progress in
                 await self?.apply(progress, toQueueItem: item.id)
             }
-            try Task.checkCancellation()
-
+            // The archive is already on disk and verified. Cancelling now would throw away a
+            // finished capture and tell the person it did not happen.
             if settings.saveToPhotos {
                 updateQueueItem(id: item.id, stage: .savingToPhotos)
-                try await saveArchiveMediaToPhotos(archiveID: item.post.id)
+                do {
+                    try await saveArchiveMediaToPhotos(archiveID: item.post.id)
+                } catch {
+                    lastNotice = UserVisibleError(message: error.localizedDescription)
+                }
             }
             updateQueueItem(id: item.id, stage: .completed, progress: 1)
             libraryPosts = await archiveStore.loadSummaries()
-            if !mediaOnly { selectedTab = .library }
+            if !warnings.isEmpty {
+                lastNotice = UserVisibleError(message: warnings.joined(separator: "\n"))
+            }
             try? await pendingQueueStore.remove(id: item.id)
         } catch is CancellationError {
             updateQueueItem(id: item.id, stage: .cancelled)
             try? await pendingQueueStore.remove(id: item.id)
         } catch {
             updateQueueItem(id: item.id, stage: .failed(error.localizedDescription))
+            // A save that failed must not be retried automatically on every future launch; the
+            // row stays in the queue with a Retry action instead.
+            try? await pendingQueueStore.remove(id: item.id)
         }
         activeSaveTasks[item.id] = nil
         transferSamples[item.id] = nil
@@ -295,15 +356,28 @@ final class AppState {
     private func restorePendingQueue() async {
         let requests = await pendingQueueStore.load()
         for request in requests where activeSaveTasks[request.id] == nil {
+            // A post that already finished before the app was killed must not be fetched again.
+            if libraryPosts.contains(where: { $0.id == request.id }) {
+                try? await pendingQueueStore.remove(id: request.id)
+                continue
+            }
             do {
                 let post = try await resolverRegistry.resolve(request.sourceURL)
                 let selectedIDs = Set(post.media.filter { request.selectedOrderIndices.contains($0.orderIndex) }.map(\.id))
+                guard !selectedIDs.isEmpty || post.media.isEmpty else {
+                    // The source no longer exposes the items that were queued, so silently
+                    // saving whatever it exposes now would archive something else entirely.
+                    try? await pendingQueueStore.remove(id: request.id)
+                    lastNotice = UserVisibleError(message: L10n.format("queue.restore.changed", request.sourceURL.host ?? request.sourceURL.absoluteString))
+                    continue
+                }
                 var item = QueueItem(id: request.id, post: post, selectedMediaIDs: selectedIDs, mode: request.mode, quality: request.quality ?? .original, stage: .waiting)
                 item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
                 queueItems.append(item)
                 startSave(item)
             } catch {
-                lastError = UserVisibleError(message: error.localizedDescription)
+                try? await pendingQueueStore.remove(id: request.id)
+                lastNotice = UserVisibleError(message: error.localizedDescription)
             }
         }
     }
@@ -323,43 +397,52 @@ final class AppState {
         guard let index = queueItems.firstIndex(where: { $0.id == id }) else { return }
         let now = Date.now
         var sample = transferSamples[id] ?? QueueTransferSample()
-        if update.mediaIndex > sample.mediaIndex {
-            sample.completedPriorMediaBytes += sample.currentMediaBytes
-            sample.mediaIndex = update.mediaIndex
-            sample.currentMediaBytes = 0
-        }
-        let overallBytes = sample.completedPriorMediaBytes + update.completedBytes
+        // The store reports absolute totals, so the rate is a plain difference: no accumulation
+        // across item boundaries and therefore no double counting.
+        let overallBytes = update.overallCompletedBytes
         let elapsed = now.timeIntervalSince(sample.lastUpdated)
-        if elapsed > 0 {
-            let transferred = max(0, overallBytes - sample.overallBytes)
+        if elapsed > 0, overallBytes >= sample.overallBytes {
+            let transferred = overallBytes - sample.overallBytes
             let instantaneous = Double(transferred) / elapsed
             sample.bytesPerSecond = sample.bytesPerSecond == 0 ? instantaneous : (sample.bytesPerSecond * 0.7) + (instantaneous * 0.3)
         }
-        sample.currentMediaBytes = update.completedBytes
         sample.overallBytes = overallBytes
         sample.lastUpdated = now
         transferSamples[id] = sample
+
         queueItems[index].stage = .downloading
         queueItems[index].bytesDownloaded = overallBytes
-        if queueItems[index].totalBytes == nil, update.mediaCount == 1 {
-            queueItems[index].totalBytes = update.expectedBytes
+        if let expected = update.overallExpectedBytes, expected > 0 {
+            queueItems[index].totalBytes = expected
+        } else if update.mediaCount == 1, let expected = update.expectedBytes, expected > 0 {
+            queueItems[index].totalBytes = expected
         }
-        queueItems[index].bytesPerSecond = sample.bytesPerSecond
-        if let expected = queueItems[index].totalBytes, sample.bytesPerSecond > 0 {
-            queueItems[index].estimatedTimeRemaining = max(0, Double(expected - overallBytes) / sample.bytesPerSecond)
+        if let expected = queueItems[index].totalBytes, expected > overallBytes, sample.bytesPerSecond > 0 {
+            queueItems[index].estimatedTimeRemaining = Double(expected - overallBytes) / sample.bytesPerSecond
         } else {
             queueItems[index].estimatedTimeRemaining = nil
         }
-        if let expected = update.expectedBytes, expected > 0 {
-            let currentFraction = Double(update.completedBytes) / Double(expected)
-            queueItems[index].progress = (Double(update.mediaIndex) + currentFraction) / Double(max(update.mediaCount, 1))
+        queueItems[index].bytesPerSecond = sample.bytesPerSecond
+        queueItems[index].progress = fraction(for: update)
+    }
+
+    /// Uses byte totals when the source published them and falls back to completed-item count,
+    /// so the bar advances even when a host omits a content length.
+    private func fraction(for update: ArchiveSaveProgress) -> Double {
+        let count = max(update.mediaCount, 1)
+        if let expected = update.overallExpectedBytes, expected > 0 {
+            return min(1, Double(update.overallCompletedBytes) / Double(expected))
         }
+        var completedFraction = 0.0
+        if let expected = update.expectedBytes, expected > 0 {
+            completedFraction = min(1, Double(update.completedBytes) / Double(expected))
+        }
+        return min(1, (Double(update.mediaIndex) + completedFraction) / Double(count))
     }
 
     private func saveArchiveMediaToPhotos(archiveID: UUID) async throws {
         let manifest = try await archiveStore.loadManifest(id: archiveID)
         for record in manifest.orderedMedia where record.type != .audio {
-            try Task.checkCancellation()
             guard let filename = record.localFilename,
                   let url = await archiveStore.localMediaURL(archiveID: archiveID, filename: filename) else { continue }
             try await PhotoLibrarySaver.save(url: url, type: record.type)
@@ -369,15 +452,12 @@ final class AppState {
     private func estimatedTotalBytes(post: ResolvedPost, selectedIDs: Set<UUID>) -> Int64? {
         let selected = post.media.filter { selectedIDs.contains($0.id) }
         let estimates = selected.compactMap { $0.highestVariant?.estimatedBytes }
-        guard estimates.count == selected.count else { return nil }
+        guard !selected.isEmpty, estimates.count == selected.count else { return nil }
         return estimates.reduce(0, +)
     }
 }
 
 private struct QueueTransferSample {
-    var mediaIndex = 0
-    var currentMediaBytes: Int64 = 0
-    var completedPriorMediaBytes: Int64 = 0
     var overallBytes: Int64 = 0
     var bytesPerSecond: Double = 0
     var lastUpdated = Date.now
@@ -408,6 +488,8 @@ private actor DownloadPermitPool {
         }
     }
 
+    /// A waiter that is resumed inherits the permit the caller is giving up, so `active` stays
+    /// equal to the number of transfers actually running.
     func release() {
         if waiters.isEmpty {
             active = max(0, active - 1)

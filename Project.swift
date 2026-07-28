@@ -91,7 +91,6 @@ let project = Project(
             deploymentTargets: .iOS("26.0"),
             infoPlist: .default,
             sources: ["PlatformContractTests/**"],
-            resources: ["PlatformContractTests/Fixtures/**"],
             dependencies: [.target(name: "MrStashy")]
         )
     ],

@@ -13,14 +13,14 @@ struct LivingPostView: View {
             StashyBackground()
             Group {
                 if let manifest { content(manifest) }
-                else if let error { ContentUnavailableView(String(localized: "livingPost.unavailable"), systemImage: "exclamationmark.triangle", description: Text(error.localizedDescription)) }
-                else { ProgressView(String(localized: "livingPost.loading")) }
+                else if let error { ContentUnavailableView(L10n.value("livingPost.unavailable"), systemImage: "exclamationmark.triangle", description: Text(error.localizedDescription)) }
+                else { ProgressView(L10n.value("livingPost.loading")) }
             }
         }
-        .navigationTitle(String(localized: "livingPost.title"))
+        .navigationTitle(L10n.value("livingPost.title"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(String(localized: "action.done")) { dismiss() }
+                Button(L10n.value("action.done")) { dismiss() }
             }
         }
         .task(id: archiveID) {
@@ -34,17 +34,17 @@ struct LivingPostView: View {
             VStack(alignment: .leading, spacing: 18) {
                 sourcePostCard(manifest)
                 StashyGlassBar {
-                    Link(destination: manifest.canonicalURL) { Label(String(localized: "livingPost.openOriginal"), systemImage: "safari") }.buttonStyle(.glass)
-                    Button { UIPasteboard.general.url = manifest.canonicalURL } label: { Label(String(localized: "livingPost.copySource"), systemImage: "doc.on.doc") }.buttonStyle(.glass)
+                    Link(destination: manifest.canonicalURL) { Label(L10n.value("livingPost.openOriginal"), systemImage: "safari") }.buttonStyle(.glass)
+                    Button { UIPasteboard.general.url = manifest.canonicalURL } label: { Label(L10n.value("livingPost.copySource"), systemImage: "doc.on.doc") }.buttonStyle(.glass)
                 }
                 HStack {
                     Button { Task { await exportStash() } } label: {
-                        Label(String(localized: "livingPost.exportStash"), systemImage: "square.and.arrow.up")
+                        Label(L10n.value("livingPost.exportStash"), systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.glass)
                     if let exportedStashURL {
                         ShareLink(item: exportedStashURL) {
-                            Label(String(localized: "livingPost.shareStash"), systemImage: "square.and.arrow.up.on.square")
+                            Label(L10n.value("livingPost.shareStash"), systemImage: "square.and.arrow.up.on.square")
                         }
                         .buttonStyle(.glassProminent)
                     }
@@ -140,7 +140,7 @@ private struct LocalMediaCard: View {
                 Image(systemName: record.type.systemImage).font(.title2).foregroundStyle(style.accent)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L10n.value("media.\(record.type.rawValue)")).font(.headline)
-                    Text(record.checksumSHA256 ?? String(localized: "livingPost.pendingChecksum")).font(.caption2.monospaced()).lineLimit(1)
+                    Text(record.checksumSHA256 ?? L10n.value("livingPost.pendingChecksum")).font(.caption2.monospaced()).lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: localURL == nil ? "exclamationmark.triangle" : "checkmark.seal.fill")
@@ -157,7 +157,7 @@ private struct LocalMediaCard: View {
                         .buttonStyle(.glass)
                 }
                 ShareLink(item: localURL) {
-                    Label(String(localized: "livingPost.shareMedia"), systemImage: "square.and.arrow.up")
+                    Label(L10n.value("livingPost.shareMedia"), systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.glass)
             }
@@ -179,11 +179,11 @@ private struct LocalMediaCard: View {
                     Button {
                         Task { await saveToPhotos(localURL) }
                     } label: {
-                        Label(String(localized: "livingPost.saveToPhotos"), systemImage: "photo.badge.arrow.down")
+                        Label(L10n.value("livingPost.saveToPhotos"), systemImage: "photo.badge.arrow.down")
                     }
                 }
                 ShareLink(item: localURL) {
-                    Label(String(localized: "livingPost.shareMedia"), systemImage: "square.and.arrow.up")
+                    Label(L10n.value("livingPost.shareMedia"), systemImage: "square.and.arrow.up")
                 }
             }
         }

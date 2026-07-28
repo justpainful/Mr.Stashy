@@ -1,0 +1,100 @@
+name: Sideload IPA
+
+# Produces the unsigned sideloadable IPA on demand.
+#
+# `release-ipa.yml` gates packaging behind live calls to real social platforms, which a hosted
+# runner cannot perform reliably from a data-centre address. That made the artifact impossible
+# to obtain even when the app itself was sound. This workflow keeps the gates that actually
+# prove the build — lint, asset validation, localization parity, and the deterministic test
+# suite — and always uploads the IPA, even when a later step reports a problem, so a diagnosable
+# build is never thrown away.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      run_ui_tests:
+        description: "Also run the UI test suite (slower)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  SCHEME: MrStashy
+  XCODE_PATH: /Applications/Xcode_26.5.0.app/Contents/Developer
+  TUIST_XDG_CACHE_HOME: /tmp/tuist-cache
+  TUIST_XDG_STATE_HOME: /tmp/tuist-state
+
+jobs:
+  package:
+    name: Build and package the unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select pinned Xcode 26.5.0
+        run: |
+          test -d "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: jdx/mise-action@v2
+
+      - name: Bootstrap the project
+        run: bash scripts/bootstrap.sh
+
+      - name: Source-policy lint
+        run: bash scripts/lint.sh
+
+      - name: Validate production assets and localization
+        run: |
+          python3 -m pip install --requirement requirements-dev.txt
+          python3 scripts/verify_assets.py
+          python3 scripts/verify_localization.py
+
+      - name: Run the deterministic test suite
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          mkdir -p Artifacts/Logs
+          RESULT_BUNDLE=Artifacts/MrStashyTests.xcresult XCODEBUILD_LOG=Artifacts/Logs/tests.log \
+            bash scripts/test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+
+      - name: Run the UI test suite
+        if: inputs.run_ui_tests
+        run: |
+          device="$(bash scripts/boot_simulator.sh)"
+          RESULT_BUNDLE=Artifacts/MrStashyUITests.xcresult XCODEBUILD_LOG=Artifacts/Logs/ui-tests.log \
+            bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
+
+      - name: Package the unsigned IPA
+        run: bash scripts/package_ipa.sh "$SCHEME"
+
+      - name: Confirm the archive layout a sideloader expects
+        run: |
+          unzip -Z1 Artifacts/MrStashy-unsigned.ipa | grep -Eq '^Payload/[^/]+\.app/Info\.plist$'
+          ls -lh Artifacts/MrStashy-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MrStashy-unsigned-ipa
+          path: |
+            Artifacts/MrStashy-unsigned.ipa
+            Artifacts/MrStashy-dSYM.zip
+            Artifacts/BuildMetadata.json
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-logs
+          path: |
+            Artifacts/Logs
+            Artifacts/MrStashyTests.xcresult
+          if-no-files-found: warn

@@ -17,7 +17,7 @@ struct ArchivedMediaPreview: View {
             ArchivedVideoPreview(url: url)
         case .audio:
             Link(destination: url) {
-                Label(String(localized: "livingPost.openMedia"), systemImage: "play.circle.fill")
+                Label(L10n.value("livingPost.openMedia"), systemImage: "play.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glass)
@@ -56,7 +56,7 @@ private struct ArchivedImagePreview: View {
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: 420)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .accessibilityLabel(Text(String(localized: "livingPost.localImage")))
+                    .accessibilityLabel(Text(L10n.value("livingPost.localImage")))
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 150)

@@ -25,7 +25,7 @@ struct LibraryView: View {
         ZStack {
             StashyBackground()
             VStack(spacing: 14) {
-                Picker(String(localized: "library.mode"), selection: $mode) {
+                Picker(L10n.value("library.mode"), selection: $mode) {
                     ForEach(LibraryMode.allCases) { mode in Text(L10n.value("library.mode.\(mode.rawValue)")).tag(mode) }
                 }
                 .pickerStyle(.segmented)
@@ -36,26 +36,31 @@ struct LibraryView: View {
                 content
             }
         }
-        .navigationTitle(String(localized: "tab.library"))
-        .task { await refreshEntries() }
-        .task(id: query) { await refreshEntries() }
-        .task(id: mode) { await refreshEntries() }
-        .onChange(of: appState.libraryPosts) { _, posts in
-            guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            if mode == .posts {
-                entries = posts
-            } else {
-                Task { await refreshEntries() }
+        .navigationTitle(L10n.value("tab.library"))
+        // One task keyed on everything that changes the result. Three separate tasks raced each
+        // other on appearance and could leave the list showing an older query's rows.
+        .task(id: refreshKey) {
+            // A short pause collapses a burst of typing into one directory scan.
+            if !query.isEmpty {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
             }
+            await refreshEntries()
         }
-        .confirmationDialog(String(localized: "library.delete.title"), isPresented: Binding(get: { archivePendingDeletion != nil }, set: { if !$0 { archivePendingDeletion = nil } })) {
-            Button(String(localized: "library.delete.confirm"), role: .destructive) {
+        .onChange(of: mode) { _, _ in
+            // A platform chosen while browsing posts may not exist among media rows, which left
+            // the picker showing a value that filtered everything away.
+            selectedPlatform = nil
+            selectedMediaType = nil
+        }
+        .confirmationDialog(L10n.value("library.delete.title"), isPresented: Binding(get: { archivePendingDeletion != nil }, set: { if !$0 { archivePendingDeletion = nil } })) {
+            Button(L10n.value("library.delete.confirm"), role: .destructive) {
                 guard let archive = archivePendingDeletion else { return }
                 Task { await delete(archive) }
             }
-            Button(String(localized: "action.cancel"), role: .cancel) { archivePendingDeletion = nil }
+            Button(L10n.value("action.cancel"), role: .cancel) { archivePendingDeletion = nil }
         } message: {
-            Text(String(localized: "library.delete.message"))
+            Text(L10n.value("library.delete.message"))
         }
         .sheet(item: $presentedArchive) { route in
             NavigationStack {
@@ -64,31 +69,31 @@ struct LibraryView: View {
             .presentationDetents([.medium, .large])
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
-        .alert(String(localized: "library.collection.create"), isPresented: $showCreateCollection) {
-            TextField(String(localized: "library.collection.name"), text: $collectionName)
-            Button(String(localized: "action.cancel"), role: .cancel) { collectionName = "" }
-            Button(String(localized: "library.collection.create")) {
+        .alert(L10n.value("library.collection.create"), isPresented: $showCreateCollection) {
+            TextField(L10n.value("library.collection.name"), text: $collectionName)
+            Button(L10n.value("action.cancel"), role: .cancel) { collectionName = "" }
+            Button(L10n.value("library.collection.create")) {
                 let name = collectionName
                 collectionName = ""
                 Task { await appState.createCollection(named: name) }
             }
         } message: {
-            Text(String(localized: "library.collection.create.body"))
+            Text(L10n.value("library.collection.create.body"))
         }
     }
 
     private var searchField: some View {
-        TextField(String(localized: "library.search"), text: $query)
+        TextField(L10n.value("library.search"), text: $query)
             .padding(.horizontal, 14).padding(.vertical, 11)
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(StashyTheme.charcoal.opacity(0.2), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(StashyTheme.hairline, lineWidth: 1))
             .padding(.horizontal, 20)
             .accessibilityIdentifier("library.search")
     }
 
     private var filters: some View {
         HStack(spacing: 12) {
-            Picker(String(localized: "library.filter.platform"), selection: $selectedPlatform) {
-                Text(String(localized: "library.filter.allPlatforms")).tag(Platform?.none)
+            Picker(L10n.value("library.filter.platform"), selection: $selectedPlatform) {
+                Text(L10n.value("library.filter.allPlatforms")).tag(Platform?.none)
                 ForEach(availablePlatforms) { platform in
                     Text(L10n.value(platform.titleKey)).tag(Optional(platform))
                 }
@@ -96,8 +101,8 @@ struct LibraryView: View {
             .pickerStyle(.menu)
 
             if mode == .media {
-                Picker(String(localized: "library.filter.mediaType"), selection: $selectedMediaType) {
-                    Text(String(localized: "library.filter.allMedia")).tag(MediaType?.none)
+                Picker(L10n.value("library.filter.mediaType"), selection: $selectedMediaType) {
+                    Text(L10n.value("library.filter.allMedia")).tag(MediaType?.none)
                     ForEach(MediaType.allCases) { type in
                         Label(L10n.value("media.\(type.rawValue)"), systemImage: type.systemImage)
                             .tag(Optional(type))
@@ -113,10 +118,10 @@ struct LibraryView: View {
     private var organizationScopes: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                ScopeChip(title: String(localized: "library.scope.all"), symbol: "square.grid.2x2", isSelected: scope == .all) {
+                ScopeChip(title: L10n.value("library.scope.all"), symbol: "square.grid.2x2", isSelected: scope == .all) {
                     scope = .all
                 }
-                ScopeChip(title: String(localized: "library.scope.pinned"), symbol: "pin.fill", isSelected: scope == .pinned) {
+                ScopeChip(title: L10n.value("library.scope.pinned"), symbol: "pin.fill", isSelected: scope == .pinned) {
                     scope = .pinned
                 }
                 ForEach(appState.libraryOrganization.collections) { collection in
@@ -130,7 +135,7 @@ struct LibraryView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.glass)
-                .accessibilityLabel(Text(String(localized: "library.collection.create")))
+                .accessibilityLabel(Text(L10n.value("library.collection.create")))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 2)
@@ -144,7 +149,7 @@ struct LibraryView: View {
                 StashyIllustration(name: "stashyLibrary", maxHeight: 220)
                 Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
                     .font(.title3.weight(.bold))
-                Text(String(localized: "library.empty.body"))
+                Text(L10n.value("library.empty.body"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -164,7 +169,20 @@ struct LibraryView: View {
                     ForEach(filteredMediaEntries) { item in
                         Button { presentedArchive = ArchiveRoute(archiveID: item.archiveID) } label: { MediaRow(item: item) }
                             .buttonStyle(.plain)
-                            .swipeActions { deleteAction(ArchivedPostSummary(id: item.archiveID, platform: item.platform, author: item.author, text: "", mediaCount: 1, savedAt: item.savedAt, localFolderName: item.archiveID.uuidString)) }
+                            // A media row belongs to a post, and deleting it removes that whole
+                            // post. The action says so rather than reading like a single-file
+                            // delete that quietly takes the rest of the post with it.
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    archivePendingDeletion = ArchivedPostSummary(
+                                        id: item.archiveID, platform: item.platform, author: item.author,
+                                        text: "", mediaCount: 1, savedAt: item.savedAt,
+                                        localFolderName: item.archiveID.uuidString
+                                    )
+                                } label: {
+                                    Label(L10n.value("library.deletePost"), systemImage: "trash")
+                                }
+                            }
                             .swipeActions(edge: .leading) { organizeActions(archiveID: item.archiveID) }
                             .contextMenu { organizeMenu(archiveID: item.archiveID) }
                     }
@@ -174,6 +192,12 @@ struct LibraryView: View {
             .scrollContentBackground(.hidden)
             .background(.clear)
         }
+    }
+
+    /// Everything that changes what the list should show, including the saved-post count so a
+    /// finished download refreshes the rows without a second code path.
+    private var refreshKey: String {
+        "\(mode.rawValue)|\(query)|\(appState.libraryPosts.count)|\(appState.libraryPosts.first?.id.uuidString ?? "")"
     }
 
     private func refreshEntries() async {
@@ -187,7 +211,7 @@ struct LibraryView: View {
 
     @ViewBuilder private func deleteAction(_ archive: ArchivedPostSummary) -> some View {
         Button(role: .destructive) { archivePendingDeletion = archive } label: {
-            Label(String(localized: "action.delete"), systemImage: "trash")
+            Label(L10n.value("action.delete"), systemImage: "trash")
         }
     }
 
@@ -235,7 +259,7 @@ struct LibraryView: View {
             Task { await appState.togglePinned(archiveID: archiveID) }
         } label: {
             Label(
-                String(localized: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
+                L10n.value(appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
                 systemImage: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "pin.slash" : "pin"
             )
         }
@@ -247,12 +271,12 @@ struct LibraryView: View {
             Task { await appState.togglePinned(archiveID: archiveID) }
         } label: {
             Label(
-                String(localized: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
+                L10n.value(appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "library.unpin" : "library.pin"),
                 systemImage: appState.libraryOrganization.pinnedArchiveIDs.contains(archiveID) ? "pin.slash" : "pin"
             )
         }
         if !appState.libraryOrganization.collections.isEmpty {
-            Menu(String(localized: "library.collection.add")) {
+            Menu(L10n.value("library.collection.add")) {
                 ForEach(appState.libraryOrganization.collections) { collection in
                     Button {
                         Task { await appState.toggleMembership(archiveID: archiveID, collectionID: collection.id) }
@@ -295,7 +319,7 @@ private struct PostRow: View {
             PlatformIcon(platform: summary.platform, size: 36)
             VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading, spacing: 4) {
                 Text(summary.author).font(.headline)
-                Text(summary.text.isEmpty ? String(localized: "library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
+                Text(summary.text.isEmpty ? L10n.value("library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
                 Text(L10n.format("library.mediaCount", Int64(summary.mediaCount)))
                     .font(.caption).foregroundStyle(StashyTheme.green)
             }
@@ -314,7 +338,7 @@ private struct MediaRow: View {
             Image(systemName: item.type.systemImage).foregroundStyle(StashyTheme.aqua)
             VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading) {
                 Text(item.author).font(.headline)
-                Text(String(localized: "library.mediaBacklink"))
+                Text(L10n.value("library.mediaBacklink"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)

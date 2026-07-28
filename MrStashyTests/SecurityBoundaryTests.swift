@@ -28,6 +28,15 @@ struct SecurityBoundaryTests {
         #expect(archived.headers == ["Referer": "https://example.test"])
     }
 
+    /// The shape a real request actually uses: the secret follows a space, not a separator.
+    @Test func redactsASpaceSeparatedBearerHeader() {
+        let output = SensitiveLog.redact("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature")
+
+        #expect(!output.contains("eyJhbGciOiJIUzI1NiJ9"))
+        #expect(!output.contains("payload.signature"))
+        #expect(output.contains("[REDACTED]"))
+    }
+
     @Test func rawDiscordUserTokenIsRejected() {
         #expect(throws: ResolverError.authenticationRequired) {
             try KeychainStore.saveDiscordBotToken("one.two.three")

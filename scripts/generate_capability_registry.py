@@ -40,7 +40,10 @@ def main() -> int:
         "import Foundation",
         "",
         "// Generated from Artifacts/PlatformSupportReport.json by scripts/generate_capability_registry.py.",
-        "enum PlatformCapabilityRegistry {",
+        "// This file records only what a live contract run observed. It never widens what a shipped",
+        "// adapter claims: PlatformCapabilityRegistry uses it to narrow the in-code baseline, so a",
+        "// missing or failing contract can demote a source but can never promote one.",
+        "enum PlatformContractEvidence {",
         "    static let all: [PlatformCapability] = [",
     ]
     for platform in ORDER:
@@ -52,8 +55,6 @@ def main() -> int:
         [
             '        .init(platform: .discord, status: .blocked, evidence: "Bot-only, permission-scoped integration is not configured")',
             "    ]",
-            "",
-            "    static var shipped: [PlatformCapability] { all.filter { $0.status == .passing } }",
             "}",
             "",
         ]

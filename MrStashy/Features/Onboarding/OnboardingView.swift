@@ -17,10 +17,10 @@ struct OnboardingView: View {
             StashyBackground()
             VStack(spacing: 24) {
                 HStack {
-                    Text(String(localized: "app.name"))
+                    Text(L10n.value("app.name"))
                         .font(.system(.largeTitle, design: .rounded, weight: .black))
                     Spacer()
-                    Button(String(localized: "onboarding.skip"), action: onComplete)
+                    Button(L10n.value("onboarding.skip"), action: onComplete)
                         .buttonStyle(.glass)
                         .accessibilityIdentifier("onboarding.skip")
                 }
@@ -39,7 +39,7 @@ struct OnboardingView: View {
                                 .multilineTextAlignment(.center)
                             Text(L10n.value(page.1))
                                 .font(.body)
-                                .foregroundStyle(colorScheme == .dark ? StashyTheme.cream.opacity(0.76) : StashyTheme.charcoal.opacity(0.76))
+                                .foregroundStyle(StashyTheme.inkSecondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 36)
                         }
@@ -48,7 +48,7 @@ struct OnboardingView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
 
-                Button(step == pages.count - 1 ? String(localized: "onboarding.finish") : String(localized: "onboarding.next")) {
+                Button(step == pages.count - 1 ? L10n.value("onboarding.finish") : L10n.value("onboarding.next")) {
                     if step == pages.count - 1 { onComplete() } else { withAnimation { step += 1 } }
                 }
                 .buttonStyle(.glassProminent)

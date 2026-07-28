@@ -217,3 +217,69 @@
 "settings.deleteLibrary.title" = "حذف جميع الأرشيفات المحلية؟";
 "settings.deleteLibrary.confirm" = "حذف كل الأرشيفات";
 "settings.deleteLibrary.message" = "سيؤدي هذا إلى حذف جميع أرشيفات ستاشي والوسائط المنزلة من هذا الجهاز نهائيًا. لن تتأثر العناصر التي حفظتها في الصور.";
+
+/* أضيف: تقرير أمين عن القدرات، وأخطاء قابلة للمعالجة، وإدارة المفاتيح. */
+"notice.title" = "للعلم";
+"catch.retry" = "أعد المحاولة";
+"catch.startOver" = "ابدأ من جديد";
+"catch.source.accessibility" = "%@، الدعم: %@";
+
+"support.limited" = "مدعوم جزئياً";
+"support.needsCredential" = "يحتاج صلاحيتك";
+
+"resolver.warning.brandingOnly" = "هذه الصفحة نشرت صورة المشاركة الخاصة بها فقط، لذا قد لا تكون الصورة المحفوظة وسائط المنشور نفسه.";
+"resolver.warning.candidateLimit" = "عرضت الصفحة وسائط أكثر مما يفحصه ستاشي دفعة واحدة. تم الاحتفاظ بأول %lld عنصر.";
+"resolver.warning.partialMedia" = "تم حفظ %1$lld من %2$lld عنصر. لم يعد المصدر يقدّم البقية.";
+"resolver.warning.tikTokCoverOnly" = "لم ينشر تيك توك ملفاً قابلاً للتشغيل لهذا المنشور، لذلك حُفظت صورة الغلاف بدل الفيديو.";
+"resolver.warning.youTubeCoverOnly" = "لا ينشر يوتيوب عنوان ملف قابلاً للتنزيل. حُفظ العنوان والقناة وصورة الغلاف، ولم يُحفظ الفيديو.";
+"resolver.warning.adaptiveStream" = "يُنشر هذا المقطع كبثّ متكيّف لا كملف، لذلك حُفظت صورته التمهيدية.";
+"archive.warning.itemSkipped" = "تم تخطي العنصر %1$lld: %2$@";
+
+"queue.restore.changed" = "لم يعد المنشور المنتظر على %@ يقدّم العناصر التي اخترتها، لذا أُزيل من قائمة الانتظار.";
+"queue.remove" = "إزالة";
+"queue.clearFinished" = "مسح المكتمل";
+
+"results.queued.fullPost" = "يجري حفظ المنشور كاملاً.";
+"results.queued.mediaOnly" = "يجري حفظ الوسائط المحددة.";
+"results.openQueue" = "افتح قائمة الانتظار";
+"media.selection.item" = "العنصر %1$lld، %2$@";
+"library.deletePost" = "حذف المنشور كاملاً";
+
+"settings.sources" = "المصادر";
+"settings.platformDiagnostics.body" = "ما يستطيع ستاشي حفظه من كل مصدر، ولماذا. يقرأ ستاشي الصفحات العامة والواجهات التي ينشرها المصدر نفسه فقط.";
+"settings.credentials" = "صلاحياتك للمصادر";
+"settings.credentials.body" = "إذا كنت تملك صلاحية مطوّر لدى مصدر ما، أضف مفتاحك الخاص لحفظ المزيد منه. تُحفظ المفاتيح في سلسلة مفاتيح هذا الجهاز ولا تغادره.";
+"settings.credentials.placeholder" = "الصق مفتاحك";
+"settings.credentials.save" = "حفظ المفتاح";
+"settings.credentials.remove" = "إزالة المفتاح";
+"settings.credentials.stored" = "محفوظ على هذا الجهاز";
+"settings.credentials.unlocks" = "مفتاحك الخاص %@ يتيح حفظاً أكمل.";
+
+"credential.xBearerToken" = "رمز X المحمول";
+"credential.xBearerToken.help" = "رمز تطبيق من مشروع المطوّر الخاص بك على X.";
+"credential.imgurClientID" = "معرّف عميل Imgur";
+"credential.imgurClientID.help" = "معرّف عميل من تطبيق Imgur المسجّل باسمك.";
+"credential.tumblrAPIKey" = "مفتاح Tumblr";
+"credential.tumblrAPIKey.help" = "المفتاح الاستهلاكي من تطبيق Tumblr الخاص بك.";
+"credential.pinterestAccessToken" = "رمز وصول Pinterest";
+"credential.pinterestAccessToken.help" = "رمز وصول من تطبيق المطوّر الخاص بك على Pinterest.";
+"credential.instagramAccessToken" = "رمز وصول إنستغرام";
+"credential.instagramAccessToken.help" = "رمز من تطبيق Instagram Graph API الخاص بك، للمحتوى المصرّح لك بقراءته.";
+"credential.threadsAccessToken" = "رمز وصول Threads";
+"credential.threadsAccessToken.help" = "رمز من تطبيق Threads API الخاص بك، للمحتوى المصرّح لك بقراءته.";
+"credential.tikTokAccessToken" = "رمز وصول تيك توك";
+"credential.tikTokAccessToken.help" = "رمز من تطبيق المطوّر الخاص بك على تيك توك.";
+
+"resolver.recovery.invalidURL" = "تحقق من الرابط والصق العنوان الكامل بادئاً بـ https.";
+"resolver.recovery.unsupportedURL" = "افتح حالة دعم المنصات لمعرفة المصادر التي يستطيع ستاشي قراءتها.";
+"resolver.recovery.contentNotFound" = "قد يكون المنشور محذوفاً. افتح الرابط في المتصفح للتأكد.";
+"resolver.recovery.contentPrivate" = "لا يمكن أرشفة سوى المنشورات العامة. اطلب من صاحب المنشور رابطاً عاماً.";
+"resolver.recovery.authenticationRequired" = "يطلب هذا المصدر حساباً. أضف مفتاحك من الإعدادات ← صلاحياتك للمصادر، أو استخدم رابطاً عاماً.";
+"resolver.recovery.rateLimited" = "المصدر يحدّ من الطلبات مؤقتاً. انتظر دقيقة ثم أعد المحاولة.";
+"resolver.recovery.platformChanged" = "غيّر هذا المصدر تنسيق صفحاته. جرّب رابطاً آخر أو تحقق من وجود تحديث للتطبيق.";
+"resolver.recovery.mediaMissing" = "لم تنشر هذه الصفحة أي وسائط. جرّب صفحة المنشور نفسه بدل صفحة الحساب أو التصفح.";
+"resolver.recovery.qualityUnavailable" = "لم يُعرض ملف صالح للاستخدام. أعد المحاولة أو افتح المنشور للتأكد من بقاء وسائطه.";
+"resolver.recovery.expiredMediaURL" = "انتهت صلاحية رابط المصدر. افحص المنشور مرة أخرى للحصول على رابط جديد.";
+"resolver.recovery.networkFailure" = "تحقق من اتصالك ثم أعد المحاولة.";
+"resolver.recovery.invalidResponse" = "جاء رد المصدر غير متوقع. أعد المحاولة بعد قليل.";
+"resolver.recovery.verificationFailure" = "لم يكن الملف الواصل هو الوسائط التي ادّعاها، لذا جرى تجاهله. أعد المحاولة.";
