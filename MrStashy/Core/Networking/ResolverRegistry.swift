@@ -91,7 +91,8 @@ struct ResolverRegistry: Sendable {
             YouTubeResolver(client: client, prober: mediaProber),
             ImgurResolver(client: client, prober: mediaProber),
             PublicOpenGraphResolver(platform: .snapchat, client: client, prober: mediaProber),
-            PublicOpenGraphResolver(platform: .threads, client: client, prober: mediaProber),
+            // Threads answers a signed-out reader with a login page, not an empty post.
+            PublicOpenGraphResolver(platform: .threads, client: client, prober: mediaProber, emptyResultError: .authenticationRequired),
             PublicOpenGraphResolver(platform: .tumblr, client: client, prober: mediaProber),
             // Last: a public page on a source with no dedicated adapter can still publish its
             // media the ordinary way, and a blog or news post should not be refused outright.
@@ -328,20 +329,30 @@ struct DirectMediaResolver: PlatformResolver {
 struct PublicOpenGraphResolver: PlatformResolver {
     let platform: Platform
     private let engine: PageResolutionEngine
+    /// What an empty result means for this source. A source that answers signed-out readers
+    /// with a login shell publishes no metadata at all, and blaming the post for that reads as
+    /// "this post has no media" when the truth is "you are not signed in".
+    private let emptyResultError: ResolverError
 
     init(
         platform: Platform,
         client: any ResolverHTTPClient = URLSessionResolverHTTPClient(),
-        prober: any MediaProbing = PassthroughMediaProber()
+        prober: any MediaProbing = PassthroughMediaProber(),
+        emptyResultError: ResolverError = .mediaMissing
     ) {
         self.platform = platform
+        self.emptyResultError = emptyResultError
         engine = PageResolutionEngine(platform: platform, client: client, prober: prober)
     }
 
     func canHandle(_ url: URL) -> Bool { URLCanonicalizer.platform(for: url) == platform }
 
     func resolve(_ request: ResolveRequest) async throws -> ResolvedPost {
-        try await engine.resolvePage(request, resolverVersion: "public-page.2")
+        do {
+            return try await engine.resolvePage(request, resolverVersion: "public-page.2")
+        } catch let error as ResolverError where error == .mediaMissing {
+            throw emptyResultError
+        }
     }
 }
 

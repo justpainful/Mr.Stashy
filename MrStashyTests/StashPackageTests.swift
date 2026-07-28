@@ -30,4 +30,28 @@ struct StashPackageTests {
         #expect(FileManager.default.fileExists(atPath: restored.appendingPathComponent("manifest.json").path))
         #expect(FileManager.default.fileExists(atPath: restored.appendingPathComponent("media/0-card.png").path))
     }
+
+    /// Expansion is bounded by the bytes actually produced, not by the size the package claims.
+    /// A package can declare one byte and expand to gigabytes, so the declared value can never
+    /// be the thing that stops it.
+    @Test func extractionStopsOnceItHasProducedMoreThanItsBudget() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveID = UUID()
+        let archiveDirectory = root.appendingPathComponent(archiveID.uuidString, isDirectory: true)
+        let mediaDirectory = archiveDirectory.appendingPathComponent("media", isDirectory: true)
+        try FileManager.default.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
+        // Highly compressible, so the stored size is far smaller than what it expands to.
+        try Data(repeating: 0, count: 512_000).write(to: mediaDirectory.appendingPathComponent("0-big.bin"))
+
+        let package = root.appendingPathComponent("archive.stash")
+        let extraction = root.appendingPathComponent("extraction", isDirectory: true)
+        try StashPackage.write(archiveDirectory: archiveDirectory, to: package)
+
+        #expect(throws: StashPackageError.self) {
+            try StashPackage.extract(from: package, into: extraction, byteBudget: 4_096)
+        }
+        // Nothing partial is left behind for the manifest checks to trip over.
+        #expect(!FileManager.default.fileExists(atPath: extraction.appendingPathComponent("\(archiveID.uuidString)/media/0-big.bin").path))
+    }
 }

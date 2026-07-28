@@ -223,16 +223,29 @@ struct URLSessionMediaProber: MediaProbing {
     }
 
     func probe(_ url: URL, headers: [String: String], referer: URL?) async -> MediaProbeResult? {
+        // `HEAD` first, because a host that ignores `Range` answers a ranged `GET` with the
+        // whole file — which would mean downloading every video just to inspect a post.
+        if let head = await attempt(url, headers: headers, referer: referer, method: "HEAD") {
+            return head
+        }
+        return await attempt(url, headers: headers, referer: referer, method: "GET")
+    }
+
+    private func attempt(_ url: URL, headers: [String: String], referer: URL?, method: String) async -> MediaProbeResult? {
         var request = URLRequest(url: url)
+        request.httpMethod = method
         for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
         if let referer, request.value(forHTTPHeaderField: "Referer") == nil {
             request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
         }
-        request.setValue("bytes=0-1023", forHTTPHeaderField: "Range")
+        if method == "GET" { request.setValue("bytes=0-1023", forHTTPHeaderField: "Range") }
         request.applyProfile(.browser, timeout: 12)
         guard let (data, response) = try? await client.data(for: request) else { return nil }
         guard (200 ... 299).contains(response.statusCode) else { return nil }
+        // Some hosts answer `HEAD` with 200 and no type at all, which proves nothing; fall
+        // through to the ranged read rather than accepting an address on that basis.
         let contentType = response.value(forHTTPHeaderField: "Content-Type")
+        if method == "HEAD", contentType == nil { return nil }
         let result = MediaProbeResult(url: response.url ?? url, contentType: contentType, contentLength: totalLength(of: response))
         guard result.isPlayableMedia, !looksLikeMarkup(data) else { return nil }
         return result

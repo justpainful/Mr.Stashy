@@ -42,7 +42,9 @@ enum StashPackage {
         }
     }
 
-    static func extract(from source: URL, into destination: URL) throws {
+    /// `byteBudget` is injectable so the expansion limit can be exercised by a test without
+    /// building a multi-gigabyte fixture.
+    static func extract(from source: URL, into destination: URL, byteBudget: UInt64 = maximumUncompressedBytes) throws {
         let fileManager = FileManager.default
         let zip: Archive
         do { zip = try Archive(url: source, accessMode: .read) }
@@ -64,17 +66,43 @@ enum StashPackage {
             }
             if let packageRoot, packageRoot != String(components[0]) { throw StashPackageError.invalidPackage }
             packageRoot = String(components[0])
-            totalBytes += entry.uncompressedSize
-            guard totalBytes <= maximumUncompressedBytes else { throw StashPackageError.invalidPackage }
+            // The declared size is written by whoever produced the package, so it is a cheap
+            // first rejection and never the thing that actually bounds the write.
+            guard entry.uncompressedSize <= byteBudget else { throw StashPackageError.invalidPackage }
             let target = destination.appendingPathComponent(entry.path).standardizedFileURL
             guard target.path.hasPrefix(destination.standardizedFileURL.path + "/") else { throw StashPackageError.unsafePath }
             if entry.type == .directory {
                 try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                _ = try zip.extract(entry, to: target)
+                totalBytes = try write(entry, of: zip, to: target, runningTotal: totalBytes, byteBudget: byteBudget)
             }
         }
+    }
+
+    /// Streams one entry to disk and stops the moment the bytes actually produced exceed the
+    /// budget. Trusting the size the archive declares is what leaves the door open: a package
+    /// can claim one byte and expand to gigabytes.
+    private static func write(_ entry: Entry, of zip: Archive, to target: URL, runningTotal: UInt64, byteBudget: UInt64) throws -> UInt64 {
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: target)
+        guard fileManager.createFile(atPath: target.path, contents: nil) else { throw StashPackageError.invalidPackage }
+        let handle = try FileHandle(forWritingTo: target)
+        defer { try? handle.close() }
+        var total = runningTotal
+        do {
+            // `extract` verifies the entry's CRC as it reads, so a corrupted package fails here
+            // too rather than reaching the manifest checks with damaged bytes.
+            _ = try zip.extract(entry, consumer: { chunk in
+                total += UInt64(chunk.count)
+                guard total <= byteBudget else { throw StashPackageError.invalidPackage }
+                try handle.write(contentsOf: chunk)
+            })
+        } catch {
+            try? fileManager.removeItem(at: target)
+            throw StashPackageError.invalidPackage
+        }
+        return total
     }
 
     private static func isSafeRelativePath(_ path: String) -> Bool {
