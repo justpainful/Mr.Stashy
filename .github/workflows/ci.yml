@@ -100,7 +100,9 @@ jobs:
     name: Simulator build
     needs: [project-generation]
     runs-on: macos-26
-    timeout-minutes: 15
+    # 15 minutes was not enough headroom: a slow package checkout alone consumed twelve of them
+    # on one run and the job was killed mid-build, reporting a failure that was not one.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Select pinned Xcode 26.5.0
