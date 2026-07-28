@@ -21,6 +21,7 @@ REQUIRED = (
     "threads",
     "tumblr",
     "imgur",
+    "youTube",
 )
 
 
@@ -45,19 +46,12 @@ def main() -> int:
             })
             continue
         result = json.loads(result_path.read_text(encoding="utf-8"))
-        if result.get("platform") != platform or result.get("status") not in {"passing", "failing", "blocked", "notShipped"}:
+        if result.get("platform") != platform or result.get("status") not in {"passing", "limited", "needsCredential", "failing", "blocked", "notShipped"}:
             raise SystemExit(f"Invalid live-contract result: {result_path}")
         evidence = result.get("evidence")
         if not isinstance(evidence, str) or not evidence.strip():
             raise SystemExit(f"Missing evidence in live-contract result: {result_path}")
         platforms.append(result)
-    platforms.append(
-        {
-            "platform": "youTube",
-            "status": "notShipped",
-            "evidence": "YouTube intentionally omitted from v0.1 release per release contract.",
-        }
-    )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps({"platforms": platforms}, indent=2) + "\n", encoding="utf-8")
     return 0

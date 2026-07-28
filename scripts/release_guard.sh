@@ -2,6 +2,9 @@
 # Final local release gate. It fails closed when evidence or artifacts are absent.
 set -euo pipefail
 
+# shellcheck source=scripts/source_search.sh
+source "$(dirname "${BASH_SOURCE[0]}")/source_search.sh"
+
 report="${PLATFORM_SUPPORT_REPORT:-Artifacts/PlatformSupportReport.json}"
 ipa="${IPA_PATH:-Artifacts/MrStashy-unsigned.ipa}"
 screenshots_dir="${SCREENSHOTS_DIR:-Artifacts/Screenshots}"
@@ -43,8 +46,7 @@ done
 
 # Release code must not carry explicit incomplete or fake execution paths. Test fixtures
 # are intentionally excluded because their names may describe mocked network responses.
-if rg -n --glob '*.swift' -i \
-  '(fatalError\(|preconditionFailure\(|\bTODO\b|\bFIXME\b|\bstub\b|not implemented|deliberate mock|mock response)' \
+if search_swift '(fatalError\(|preconditionFailure\(|\bTODO\b|\bFIXME\b|\bstub\b|not implemented|deliberate mock|mock response)' \
   MrStashy Shared ShareExtension; then
   fail "Found unresolved placeholder or crash marker in production Swift code"
 fi
@@ -62,7 +64,7 @@ if [[ "${RELEASE_GUARD_SKIP_RUNTIME_AUDITS:-}" != "1" ]]; then
   for audit in Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; do
     [[ -s "$audit" ]] || fail "Missing required quality audit: $audit"
   done
-  if rg -n -i 'status:[[:space:]]*(pending|unverified)|runtime metrics unverified|crash detected|critical crash|leak detected|unresolved leak|critical performance' Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; then
+  if search_files 'status:[[:space:]]*(pending|unverified)|runtime metrics unverified|crash detected|critical crash|leak detected|unresolved leak|critical performance' Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md; then
     fail "Quality audit is unverified or contains a release-blocking finding"
   fi
 fi

@@ -39,9 +39,9 @@ enum URLCanonicalizer {
         components.queryItems = components.queryItems?.filter { item in
             let name = item.name.lowercased()
             if trackingParameterPrefixes.contains(where: { name.hasPrefix($0) }) { return false }
-            // A YouTube watch link and a Kick clip link both put the post identifier in the
-            // query string, so a short parameter is only dropped when it is not load-bearing.
-            if trackingParameterNames.contains(name) { return !isLoadBearing(name: name, host: components.host ?? "") }
+            // A YouTube watch link puts the post identifier in the query string, so a known
+            // tracking name is kept only where it actually carries meaning.
+            if trackingParameterNames.contains(name) { return isLoadBearing(name: name, host: components.host ?? "") }
             return true
         }
         if components.queryItems?.isEmpty == true { components.queryItems = nil }
@@ -49,12 +49,9 @@ enum URLCanonicalizer {
         return canonical
     }
 
+    /// `t` is a share tracker almost everywhere, but on YouTube it is the start timestamp.
     private static func isLoadBearing(name: String, host: String) -> Bool {
-        switch name {
-        case "v": return host.contains("youtube")
-        case "t": return host.contains("youtube")
-        default: return false
-        }
+        name == "t" && host.contains("youtube")
     }
 
     private static func normalizedHost(_ host: String) -> String {

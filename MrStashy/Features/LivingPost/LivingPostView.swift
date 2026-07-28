@@ -7,6 +7,10 @@ struct LivingPostView: View {
     @State private var manifest: ArchiveManifest?
     @State private var error: Error?
     @State private var exportedStashURL: URL?
+    /// Kept apart from `error`, which replaces the whole screen. An export that fails has to be
+    /// reported without discarding the archive the person is looking at — previously it was
+    /// simply swallowed and the button appeared to do nothing.
+    @State private var actionMessage: String?
 
     var body: some View {
         ZStack {
@@ -26,6 +30,14 @@ struct LivingPostView: View {
         .task(id: archiveID) {
             do { manifest = try await appState.archiveStore.loadManifest(id: archiveID) }
             catch { self.error = error }
+        }
+        .alert(
+            L10n.value("error.title"),
+            isPresented: Binding(get: { actionMessage != nil }, set: { if !$0 { actionMessage = nil } })
+        ) {
+            Button(L10n.value("action.done")) { actionMessage = nil }
+        } message: {
+            Text(actionMessage ?? "")
         }
     }
 
@@ -120,7 +132,7 @@ struct LivingPostView: View {
             try await appState.archiveStore.exportStash(id: archiveID, to: destination)
             exportedStashURL = destination
         } catch {
-            self.error = error
+            actionMessage = error.localizedDescription
         }
     }
 }

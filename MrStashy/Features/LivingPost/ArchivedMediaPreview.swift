@@ -28,19 +28,44 @@ struct ArchivedMediaPreview: View {
 private struct ArchivedGIFPreview: UIViewRepresentable {
     let url: URL
 
+    final class Coordinator {
+        var loadedURL: URL?
+        var task: Task<Void, Never>?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> UIImageView {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
         imageView.layer.cornerRadius = 16
-        imageView.image = AnimatedGIF.make(url: url)
-        imageView.startAnimating()
         return imageView
     }
 
+    // Decoding every frame of a GIF is expensive, and doing it inline on each SwiftUI update
+    // froze the Living Post while scrolling. Frames are decoded once, off the main thread, and
+    // only when the file being shown actually changes.
     func updateUIView(_ imageView: UIImageView, context: Context) {
-        imageView.image = AnimatedGIF.make(url: url)
-        imageView.startAnimating()
+        guard context.coordinator.loadedURL != url else { return }
+        context.coordinator.loadedURL = url
+        context.coordinator.task?.cancel()
+        imageView.stopAnimating()
+        imageView.image = nil
+        let source = url
+        context.coordinator.task = Task { [weak imageView] in
+            let animation = await Task.detached(priority: .userInitiated) {
+                AnimatedGIF.make(url: source)
+            }.value
+            guard !Task.isCancelled, let imageView else { return }
+            imageView.image = animation
+            if animation?.images != nil { imageView.startAnimating() }
+        }
+    }
+
+    static func dismantleUIView(_ imageView: UIImageView, coordinator: Coordinator) {
+        coordinator.task?.cancel()
+        imageView.stopAnimating()
     }
 }
 

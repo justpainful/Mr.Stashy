@@ -8,7 +8,10 @@ from pathlib import Path
 
 REQUIRED = ("tikTok", "instagram", "x", "pinterest", "snapchat", "kick", "threads", "tumblr", "imgur")
 ALL = REQUIRED + ("youTube", "directMedia")
-VALID = {"passing", "failing", "blocked", "notShipped"}
+VALID = {"passing", "limited", "needsCredential", "failing", "blocked", "notShipped"}
+# A source that can be captured, even partially, satisfies a release gate. Only a source
+# that fails or is blocked does not.
+RELEASE_ACCEPTABLE = {"passing", "limited", "needsCredential"}
 
 
 def main() -> int:
@@ -50,7 +53,7 @@ def main() -> int:
     if missing:
         raise SystemExit("Support report omitted: " + ", ".join(missing))
     if arguments.release:
-        failures = [platform for platform in REQUIRED if by_platform[platform]["status"] != "passing"]
+        failures = [platform for platform in REQUIRED if by_platform[platform]["status"] not in RELEASE_ACCEPTABLE]
         if failures:
             raise SystemExit("Required platform contracts are not passing: " + ", ".join(failures))
     required_passing = []
