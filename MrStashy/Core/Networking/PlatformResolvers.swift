@@ -349,7 +349,7 @@ struct PinterestResolver: PlatformResolver {
         guard let endpoint = components?.url else { throw ResolverError.invalidURL }
         let data = try await engine.fetcher.json(at: endpoint, profile: .browser)
         let payload = try JSONDecoder().decode(PinterestWidgetResponse.self, from: data)
-        guard let pin = payload.data?.pins?.first, pin.error == nil else { throw ResolverError.contentNotFound }
+        guard let pin = payload.pins.first, pin.error == nil else { throw ResolverError.contentNotFound }
         let candidates = pin.mediaCandidates()
         guard !candidates.isEmpty else { throw ResolverError.mediaMissing }
         return try await engine.post(
@@ -698,9 +698,6 @@ private struct XSyndicationPost: Decodable {
 }
 
 private struct PinterestWidgetResponse: Decodable {
-    struct Container: Decodable {
-        let pins: [Pin]?
-    }
     struct Pin: Decodable {
         struct Images: Decodable {
             let original: Image?
@@ -773,7 +770,24 @@ private struct PinterestWidgetResponse: Decodable {
         }
     }
 
-    let data: Container?
+    let pins: [Pin]
+
+    /// The widget endpoint answers with `data` as a bare array of pins. It has also been seen
+    /// wrapping them in an object, so both shapes decode rather than one silently failing and
+    /// sending every pin down the page fallback.
+    private enum CodingKeys: String, CodingKey { case data }
+    private struct Wrapper: Decodable { let pins: [Pin]? }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        if let array = try? values.decode([Pin].self, forKey: .data) {
+            pins = array
+        } else if let wrapped = try? values.decode(Wrapper.self, forKey: .data) {
+            pins = wrapped.pins ?? []
+        } else {
+            pins = []
+        }
+    }
 }
 
 private struct KickClipResponse: Decodable {

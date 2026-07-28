@@ -179,6 +179,79 @@ struct ResolverPipelineTests {
         #expect(DownloadEngine.error(for: 401) == .authenticationRequired)
     }
 
+    // MARK: - Real payload shapes
+
+    /// The widget endpoint answers with `data` as a bare array. Decoding it as an object made
+    /// every pin fall through to the page, which publishes nothing pin-specific.
+    @Test func pinterestWidgetPayloadDecodesTheShapeTheEndpointActuallyReturns() async throws {
+        let source = try #require(URL(string: "https://www.pinterest.com/pin/99290459813297/"))
+        let client = FixtureJSONClient(json: """
+        {"status":"success","code":0,"message":"ok","endpoint_name":"v3_pin_info","data":[
+          {"id":"99290459813297","description":"A public pin",
+           "images":{"orig":{"url":"https://i.pinimg.com/originals/a/b/c.jpg","width":1200,"height":1600}},
+           "pinner":{"full_name":"Stashy","username":"stashy"}}
+        ]}
+        """)
+        let resolver = PinterestResolver(client: client, prober: PassthroughMediaProber())
+
+        let post = try await resolver.resolve(ResolveRequest(originalURL: source, canonicalURL: source))
+
+        #expect(post.media.count == 1)
+        #expect(post.media.first?.highestVariant?.url.absoluteString == "https://i.pinimg.com/originals/a/b/c.jpg")
+        #expect(post.media.first?.width == 1200)
+        #expect(post.author.username == "stashy")
+        #expect(post.text == "A public pin")
+    }
+
+    /// Kick publishes clips as adaptive streams. Archiving the manifest would put a few
+    /// kilobytes of playlist text into the archive under the name of the video.
+    @Test func kickClipsFallBackToThePosterFrameAndSayWhy() async throws {
+        let source = try #require(URL(string: "https://kick.com/stashy?clip=clip_01ABC"))
+        let client = FixtureJSONClient(json: """
+        {"clip":{"id":"clip_01ABC","title":"A clip","duration":15,
+          "clip_url":"https://clips.kick.com/a/playlist.m3u8",
+          "video_url":"https://clips.kick.com/a/playlist.m3u8",
+          "thumbnail_url":"https://clips.kick.com/a/thumbnail.webp",
+          "channel":{"username":"Stashy","slug":"stashy"}}}
+        """)
+        let resolver = KickResolver(client: client, prober: PassthroughMediaProber())
+
+        let post = try await resolver.resolve(ResolveRequest(originalURL: source, canonicalURL: source))
+
+        #expect(post.media.count == 1)
+        #expect(post.media.first?.type == .photo)
+        #expect(post.media.first?.highestVariant?.url.absoluteString.hasSuffix("thumbnail.webp") == true)
+        #expect(!post.warnings.isEmpty)
+    }
+
+    /// The public syndication payload is where X exposes ordered media; the preview tags do not.
+    @Test func xSyndicationPayloadKeepsOrderedMediaAndOriginalSizes() async throws {
+        let source = try #require(URL(string: "https://x.com/stashy/status/1349129669258448897"))
+        let client = FixtureJSONClient(json: """
+        {"text":"A public post","created_at":"2021-01-12T23:02:33.000Z",
+         "user":{"name":"Stashy","screen_name":"stashy","profile_image_url_https":"https://pbs.twimg.com/a.jpg"},
+         "mediaDetails":[
+           {"type":"photo","media_url_https":"https://pbs.twimg.com/media/one.jpg","original_info":{"width":960,"height":900}},
+           {"type":"video","media_url_https":"https://pbs.twimg.com/media/poster.jpg","original_info":{"width":1280,"height":720},
+            "video_info":{"duration_millis":12000,"variants":[
+              {"content_type":"video/mp4","url":"https://video.twimg.com/low.mp4","bitrate":832000},
+              {"content_type":"video/mp4","url":"https://video.twimg.com/high.mp4","bitrate":2176000},
+              {"content_type":"application/x-mpegURL","url":"https://video.twimg.com/stream.m3u8"}]}}
+         ]}
+        """)
+        let resolver = XResolver(client: client, credentials: NoResolverCredentials(), prober: PassthroughMediaProber())
+
+        let post = try await resolver.resolve(ResolveRequest(originalURL: source, canonicalURL: source))
+
+        #expect(post.author.username == "stashy")
+        #expect(post.media.map(\.type) == [.photo, .video])
+        // The original-size parameter is what makes X return the full image rather than a crop.
+        #expect(post.media[0].highestVariant?.url.absoluteString == "https://pbs.twimg.com/media/one.jpg?name=orig")
+        // Highest-bitrate progressive file, never the adaptive manifest.
+        #expect(post.media[1].highestVariant?.url.absoluteString == "https://video.twimg.com/high.mp4")
+        #expect(post.media[1].duration == 12)
+    }
+
     // MARK: - Signed addresses
 
     @Test func anExpiredSignedAddressIsRecognisedBeforeItIsDownloaded() throws {
@@ -276,6 +349,24 @@ private struct FixturePageClient: ResolverHTTPClient {
         )!
         return (Data(html.utf8), response)
     }
+}
+
+private struct FixtureJSONClient: ResolverHTTPClient {
+    let json: String
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let response = HTTPURLResponse(
+            url: request.url ?? URL(string: "https://example.com")!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        return (Data(json.utf8), response)
+    }
+}
+
+private struct NoResolverCredentials: ResolverCredentialProvider {
+    func value(for credential: ResolverCredential) -> String? { nil }
 }
 
 private struct FixtureProber: MediaProbing {
