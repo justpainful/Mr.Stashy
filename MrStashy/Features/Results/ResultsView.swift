@@ -122,14 +122,48 @@ struct ResultsView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var mediaList: some View {
-        LazyVStack(spacing: 12) {
-            ForEach(post.media.sorted(by: { $0.orderIndex < $1.orderIndex })) { media in
-                MediaSelectionRow(media: media, isSelected: selectedMediaIDs.contains(media.id)) {
-                    if selectedMediaIDs.contains(media.id) { selectedMediaIDs.remove(media.id) } else { selectedMediaIDs.insert(media.id) }
+    private var sortedMedia: [ResolvedMedia] { post.media.sorted { $0.orderIndex < $1.orderIndex } }
+
+    @ViewBuilder private var mediaList: some View {
+        if sortedMedia.isEmpty {
+            EmptyView()
+        } else if sortedMedia.count == 1, let media = sortedMedia.first {
+            // A single item gets a large preview with its details underneath, so the review is
+            // the media itself rather than one word describing it.
+            VStack(alignment: .leading, spacing: 8) {
+                MediaSelectionCard(media: media, isSelected: selectedMediaIDs.contains(media.id), ratio: previewRatio(for: media)) {
+                    toggle(media)
+                }
+                Text(MediaCardMetadata.summary(for: media))
+                    .font(.caption)
+                    .foregroundStyle(StashyTheme.inkSecondary)
+            }
+        } else {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(sortedMedia) { media in
+                    MediaSelectionCard(media: media, isSelected: selectedMediaIDs.contains(media.id), ratio: 1) {
+                        toggle(media)
+                    }
                 }
             }
         }
+    }
+
+    private func toggle(_ media: ResolvedMedia) {
+        if selectedMediaIDs.contains(media.id) {
+            selectedMediaIDs.remove(media.id)
+        } else {
+            selectedMediaIDs.insert(media.id)
+        }
+    }
+
+    /// A single-item preview follows the media's own shape, clamped so an extreme aspect ratio
+    /// cannot make the card fill the whole screen.
+    private func previewRatio(for media: ResolvedMedia) -> CGFloat {
+        if let width = media.width, let height = media.height, width > 0, height > 0 {
+            return min(max(CGFloat(width) / CGFloat(height), 0.6), 1.6)
+        }
+        return media.type == .video ? 16.0 / 9.0 : 3.0 / 4.0
     }
 
     private var actionBar: some View {
@@ -191,58 +225,61 @@ struct ResultsView: View {
     }
 }
 
-private struct MediaSelectionRow: View {
+/// One selectable media card: the real preview, a selection tick, and a highlighted border
+/// when chosen. Tapping toggles whether the item is included in the save.
+private struct MediaSelectionCard: View {
     let media: ResolvedMedia
     let isSelected: Bool
+    var ratio: CGFloat = 1
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: media.type.systemImage).font(.title2).foregroundStyle(StashyTheme.green).frame(width: 34)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.value("media.\(media.type.rawValue)")).font(.headline)
-                    Text(metadata).font(.caption).foregroundStyle(StashyTheme.inkSecondary)
-                    if let variant = media.highestVariant {
-                        Text(variant.qualityLabel).font(.caption2.weight(.semibold)).foregroundStyle(StashyTheme.green)
-                    }
+            RemoteMediaThumbnail(media: media)
+                .aspectRatio(ratio, contentMode: .fit)
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(
+                            isSelected ? Color.white : Color.white.opacity(0.95),
+                            isSelected ? StashyTheme.green : Color.black.opacity(0.32)
+                        )
+                        .padding(8)
+                        .shadow(color: .black.opacity(0.25), radius: 2)
                 }
-                Spacer()
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? StashyTheme.green : Color.secondary)
-            }
-            .padding(14)
-            .contentShape(.rect)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(isSelected ? StashyTheme.green : Color.clear, lineWidth: 3)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
-        // Each row names the item it belongs to and reports its own selected state, so the
-        // list is navigable rather than a run of identically labelled buttons.
+        // Each card names the item it belongs to and reports its own selected state, so the
+        // grid is navigable rather than a run of identically labelled buttons.
         .accessibilityLabel(Text(L10n.format(
             "media.selection.item",
             Int64(media.orderIndex + 1),
-            L10n.value("media.\(media.type.rawValue)")
+            media.type.shortLabel
         )))
-        .accessibilityValue(Text(metadata))
+        .accessibilityValue(Text(MediaCardMetadata.summary(for: media)))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("results.media.\(media.orderIndex)")
     }
+}
 
-    private var metadata: String {
-        var values: [String] = []
+/// Builds the one-line technical summary shown under a single-item preview.
+enum MediaCardMetadata {
+    static func summary(for media: ResolvedMedia) -> String {
+        var values: [String] = [media.type.shortLabel]
         if let width = media.width, let height = media.height {
             values.append("\(width) × \(height)")
-        } else {
-            values.append(L10n.value("media.unknownDimensions"))
         }
         if let duration = media.duration {
-            values.append(Duration.seconds(duration).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
+            values.append(ThumbnailBadge.durationText(duration))
         }
         if let variant = media.highestVariant {
             if let codec = variant.codec, !codec.isEmpty { values.append(codec.uppercased()) }
-            if let container = variant.container, !container.isEmpty { values.append(container.uppercased()) }
             if let bytes = variant.estimatedBytes { values.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
-            values.append(L10n.value(variant.cleanliness.titleKey))
         }
         return values.joined(separator: " · ")
     }

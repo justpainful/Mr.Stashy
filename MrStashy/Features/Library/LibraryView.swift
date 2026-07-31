@@ -145,52 +145,64 @@ struct LibraryView: View {
 
     @ViewBuilder private var content: some View {
         if (mode == .posts && filteredEntries.isEmpty) || (mode == .media && filteredMediaEntries.isEmpty) {
-            VStack(spacing: 14) {
-                StashyIllustration(name: "stashyLibrary", maxHeight: 220)
-                Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
-                    .font(.title3.weight(.bold))
-                Text(L10n.value("library.empty.body"))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-        } else {
+            emptyState
+        } else if mode == .posts {
             List {
-                if mode == .posts {
-                    ForEach(filteredEntries) { item in
-                        Button { presentedArchive = ArchiveRoute(archiveID: item.id) } label: { PostRow(summary: item) }
-                            .buttonStyle(.plain)
-                            .swipeActions { deleteAction(item) }
-                            .swipeActions(edge: .leading) { organizeActions(archiveID: item.id) }
-                            .contextMenu { organizeMenu(archiveID: item.id) }
-                    }
-                } else {
-                    ForEach(filteredMediaEntries) { item in
-                        Button { presentedArchive = ArchiveRoute(archiveID: item.archiveID) } label: { MediaRow(item: item) }
-                            .buttonStyle(.plain)
-                            // A media row belongs to a post, and deleting it removes that whole
-                            // post. The action says so rather than reading like a single-file
-                            // delete that quietly takes the rest of the post with it.
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    archivePendingDeletion = ArchivedPostSummary(
-                                        id: item.archiveID, platform: item.platform, author: item.author,
-                                        text: "", mediaCount: 1, savedAt: item.savedAt,
-                                        localFolderName: item.archiveID.uuidString
-                                    )
-                                } label: {
-                                    Label(L10n.value("library.deletePost"), systemImage: "trash")
-                                }
-                            }
-                            .swipeActions(edge: .leading) { organizeActions(archiveID: item.archiveID) }
-                            .contextMenu { organizeMenu(archiveID: item.archiveID) }
-                    }
+                ForEach(filteredEntries) { item in
+                    Button { presentedArchive = ArchiveRoute(archiveID: item.id) } label: { PostCard(summary: item, store: appState.archiveStore) }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .swipeActions { deleteAction(item) }
+                        .swipeActions(edge: .leading) { organizeActions(archiveID: item.id) }
+                        .contextMenu { organizeMenu(archiveID: item.id) }
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(.clear)
+        } else {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], spacing: 10) {
+                    ForEach(filteredMediaEntries) { item in
+                        Button { presentedArchive = ArchiveRoute(archiveID: item.archiveID) } label: {
+                            LibraryMediaCell(item: item, store: appState.archiveStore)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("library.mediaItem")
+                        // A media cell belongs to a post, and deleting it removes that whole
+                        // post. The action says so rather than reading like a single-file delete.
+                        .contextMenu {
+                            organizeMenu(archiveID: item.archiveID)
+                            Button(role: .destructive) {
+                                archivePendingDeletion = ArchivedPostSummary(
+                                    id: item.archiveID, platform: item.platform, author: item.author,
+                                    text: "", mediaCount: 1, savedAt: item.savedAt,
+                                    localFolderName: item.archiveID.uuidString
+                                )
+                            } label: {
+                                Label(L10n.value("library.deletePost"), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            StashyIllustration(name: "stashyLibrary", maxHeight: 220)
+            Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
+                .font(.title3.weight(.bold))
+            Text(L10n.value("library.empty.body"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
         }
     }
 
@@ -317,41 +329,81 @@ private struct ScopeChip: View {
     }
 }
 
-private struct PostRow: View {
+/// A saved-post row led by a real thumbnail of its first media, so the library reads as a
+/// shelf of what was kept rather than a list of names.
+private struct PostCard: View {
     @Environment(\.layoutDirection) private var layoutDirection
     let summary: ArchivedPostSummary
+    let store: ArchiveStore
+    @State private var lead: LeadMedia?
+
+    private struct LeadMedia { let url: URL; let type: MediaType }
+
     var body: some View {
         HStack(spacing: 12) {
-            PlatformIcon(platform: summary.platform, size: 36)
+            leadThumbnail
+                .frame(width: 76, height: 76)
             VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading, spacing: 4) {
-                Text(summary.author).font(.headline)
-                Text(summary.text.isEmpty ? L10n.value("library.mediaOnly") : summary.text).lineLimit(2).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
+                HStack(spacing: 6) {
+                    PlatformIcon(platform: summary.platform, size: 18)
+                    Text(summary.author).font(.headline).lineLimit(1)
+                }
+                Text(summary.text.isEmpty ? L10n.value("library.mediaOnly") : summary.text)
+                    .lineLimit(2).font(.subheadline).foregroundStyle(.secondary)
+                    .multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
                 Text(L10n.format("library.mediaCount", Int64(summary.mediaCount)))
                     .font(.caption).foregroundStyle(StashyTheme.green)
             }
             .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)
         }
-        .padding(.vertical, 5)
+        .padding(10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .task(id: summary.id) {
+            guard let manifest = try? await store.loadManifest(id: summary.id),
+                  let first = manifest.orderedMedia.min(by: { $0.orderIndex < $1.orderIndex }),
+                  let filename = first.localFilename,
+                  let url = await store.localMediaURL(archiveID: summary.id, filename: filename)
+            else { return }
+            lead = LeadMedia(url: url, type: first.type)
+        }
+    }
+
+    @ViewBuilder private var leadThumbnail: some View {
+        if let lead {
+            LocalMediaThumbnail(url: lead.url, type: lead.type, cornerRadius: 14)
+        } else {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(StashyTheme.hairline)
+                .overlay { PlatformIcon(platform: summary.platform, size: 32) }
+        }
     }
 }
 
-private struct MediaRow: View {
-    @Environment(\.layoutDirection) private var layoutDirection
+/// One tile in the media grid: a real thumbnail of the saved file with its source badge.
+private struct LibraryMediaCell: View {
     let item: ArchivedMediaSummary
+    let store: ArchiveStore
+    @State private var url: URL?
+
     var body: some View {
-        HStack(spacing: 10) {
-            PlatformIcon(platform: item.platform, size: 30)
-            Image(systemName: item.type.systemImage).foregroundStyle(StashyTheme.aqua)
-            VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading) {
-                Text(item.author).font(.headline)
-                Text(L10n.value("library.mediaBacklink"))
-                    .font(.caption).foregroundStyle(.secondary)
+        Group {
+            if let url {
+                LocalMediaThumbnail(url: url, type: item.type)
+            } else {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(item.type.tint.opacity(0.16))
+                    .overlay { ProgressView() }
             }
-            .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)
-            Spacer()
-            if let fileSize = item.fileSize {
-                Text(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)).font(.caption).foregroundStyle(.secondary)
-            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .overlay(alignment: .topLeading) {
+            PlatformIcon(platform: item.platform, size: 22).padding(6)
+        }
+        .accessibilityLabel(Text(L10n.format("media.selection.item", Int64(item.orderIndex + 1), item.type.shortLabel)))
+        .accessibilityValue(Text(item.author))
+        .task(id: item.id) {
+            guard let filename = item.localFilename else { return }
+            url = await store.localMediaURL(archiveID: item.archiveID, filename: filename)
         }
     }
 }

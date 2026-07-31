@@ -21,7 +21,10 @@ struct UserSettings: Codable, Equatable, Sendable {
 
     var quality: Quality = .original
     var saveMode: SaveMode = .askEveryTime
-    var saveToPhotos = false
+    // Media a person saves should land in their photo library by default. Keeping this off is
+    // what made a save look like it did nothing: the file went only to the private in-app
+    // archive, so opening Photos showed no new item.
+    var saveToPhotos = true
     var allowCellular = true
     var maxParallelDownloads = 3
     var appearance: Appearance = .system
@@ -39,7 +42,7 @@ struct UserSettings: Codable, Equatable, Sendable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         quality = try values.decodeIfPresent(Quality.self, forKey: .quality) ?? .original
         saveMode = try values.decodeIfPresent(SaveMode.self, forKey: .saveMode) ?? .askEveryTime
-        saveToPhotos = try values.decodeIfPresent(Bool.self, forKey: .saveToPhotos) ?? false
+        saveToPhotos = try values.decodeIfPresent(Bool.self, forKey: .saveToPhotos) ?? true
         allowCellular = try values.decodeIfPresent(Bool.self, forKey: .allowCellular) ?? true
         maxParallelDownloads = try values.decodeIfPresent(Int.self, forKey: .maxParallelDownloads) ?? 3
         appearance = try values.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system

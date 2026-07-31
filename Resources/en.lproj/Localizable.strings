@@ -34,6 +34,7 @@
 "catch.recent.empty" = "Your first saved post will appear here.";
 "catch.ready.title" = "Ready to review";
 "catch.ready.count" = "Found %lld item(s).";
+"catch.ready.reviewSave" = "Review & save";
 "catch.stage.checkingLink" = "Checking link…";
 "catch.stage.resolvingPlatform" = "Recognising platform…";
 "catch.stage.findingContent" = "Finding post content…";

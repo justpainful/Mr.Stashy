@@ -50,7 +50,7 @@ final class ScreenshotFlows: XCTestCase {
         XCTAssertTrue(mediaSegment.waitForExistence(timeout: 5))
         mediaSegment.tap()
         capture(app, named: "library-media.png")
-        let firstLibraryRow = app.cells.firstMatch
+        let firstLibraryRow = app.buttons["library.mediaItem"].firstMatch
         XCTAssertTrue(firstLibraryRow.waitForExistence(timeout: 8))
         firstLibraryRow.tap()
         capture(app, named: "living-post.png")

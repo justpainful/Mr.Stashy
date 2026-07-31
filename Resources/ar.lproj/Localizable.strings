@@ -34,6 +34,7 @@
 "catch.recent.empty" = "سيظهر هنا أول منشور تحفظه.";
 "catch.ready.title" = "جاهز للمراجعة";
 "catch.ready.count" = "تم العثور على %lld عنصرًا.";
+"catch.ready.reviewSave" = "راجِع واحفظ";
 "catch.stage.checkingLink" = "جارٍ فحص الرابط…";
 "catch.stage.resolvingPlatform" = "جارٍ التعرف على المنصة…";
 "catch.stage.findingContent" = "جارٍ العثور على محتوى المنشور…";

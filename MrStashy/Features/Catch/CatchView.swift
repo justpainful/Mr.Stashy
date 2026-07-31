@@ -298,25 +298,53 @@ private struct PlatformPasteSheet: View {
     }
 }
 
+/// The result card. It shows the actual media the moment a link resolves — a strip of real
+/// thumbnails — so a person sees what was found without opening anything, and taps through only
+/// to choose and save.
 private struct ResultReadyRow: View {
     let post: ResolvedPost
+    private var sortedMedia: [ResolvedMedia] { post.media.sorted { $0.orderIndex < $1.orderIndex } }
+    private var preview: [ResolvedMedia] { Array(sortedMedia.prefix(3)) }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(StashyTheme.green)
-                .frame(width: 66, height: 48)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading) {
-                Text(L10n.value("catch.ready.title")).font(.headline)
-                Text(L10n.format("catch.ready.count", Int64(post.media.count)))
-                    .font(.subheadline).foregroundStyle(StashyTheme.inkSecondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                PlatformIcon(platform: post.platform, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(post.author.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(L10n.format("catch.ready.count", Int64(post.media.count)))
+                        .font(.caption).foregroundStyle(StashyTheme.inkSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.forward").foregroundStyle(StashyTheme.inkSecondary)
             }
-            Spacer()
-            // A forward chevron follows the reading direction, so it points correctly in Arabic.
-            Image(systemName: "chevron.forward")
+            if !preview.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(Array(preview.enumerated()), id: \.element.id) { index, media in
+                        RemoteMediaThumbnail(media: media)
+                            .frame(height: 104)
+                            .frame(maxWidth: .infinity)
+                            .overlay {
+                                if index == preview.count - 1, sortedMedia.count > preview.count {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.black.opacity(0.48))
+                                        Text("+\(sortedMedia.count - preview.count)")
+                                            .font(.title3.weight(.bold)).foregroundStyle(.white)
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+            if !post.text.isEmpty {
+                Text(post.text).font(.caption).foregroundStyle(StashyTheme.ink).lineLimit(2).multilineTextAlignment(.leading)
+            }
+            Label(L10n.value("catch.ready.reviewSave"), systemImage: "square.and.arrow.down")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(StashyTheme.green)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .glassEffect(.regular.tint(StashyTheme.aqua.opacity(0.18)).interactive(), in: .rect(cornerRadius: 20))
+        .glassEffect(.regular.tint(StashyTheme.aqua.opacity(0.18)).interactive(), in: .rect(cornerRadius: 22))
     }
 }
