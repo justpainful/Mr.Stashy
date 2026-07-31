@@ -53,6 +53,8 @@
 "media.audio" = "Audio";
 "media.gif" = "GIF";
 "media.selection" = "Select media";
+"media.include" = "Include in save";
+"media.exclude" = "Remove from save";
 "media.unknownDimensions" = "Dimensions unavailable";
 
 "library.scope.all" = "All";

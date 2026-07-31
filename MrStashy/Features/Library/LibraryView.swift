@@ -156,7 +156,7 @@ struct LibraryView: View {
                         .listRowSeparator(.hidden)
                         .swipeActions { deleteAction(item) }
                         .swipeActions(edge: .leading) { organizeActions(archiveID: item.id) }
-                        .contextMenu { organizeMenu(archiveID: item.id) }
+                        .contextMenu { organizeMenu(archiveID: item.id) } preview: { PostPeek(summary: item, store: appState.archiveStore) }
                 }
             }
             .listStyle(.plain)
@@ -184,6 +184,8 @@ struct LibraryView: View {
                             } label: {
                                 Label(L10n.value("library.deletePost"), systemImage: "trash")
                             }
+                        } preview: {
+                            LibraryMediaPeek(item: item, store: appState.archiveStore)
                         }
                     }
                 }
@@ -404,6 +406,69 @@ private struct LibraryMediaCell: View {
         .task(id: item.id) {
             guard let filename = item.localFilename else { return }
             url = await store.localMediaURL(archiveID: item.archiveID, filename: filename)
+        }
+    }
+}
+
+/// The long-press peek for one saved media file: the real image, GIF, or a video's first frame,
+/// shown large. It loads the file itself so the context menu stays self-contained.
+private struct LibraryMediaPeek: View {
+    let item: ArchivedMediaSummary
+    let store: ArchiveStore
+    @State private var url: URL?
+
+    var body: some View {
+        Group {
+            if let url {
+                ArchivedMediaPreview(url: url, type: item.type)
+                    .padding(10)
+            } else {
+                ProgressView().frame(width: 320, height: 240)
+            }
+        }
+        .frame(width: 360)
+        .task(id: item.id) {
+            guard let filename = item.localFilename else { return }
+            url = await store.localMediaURL(archiveID: item.archiveID, filename: filename)
+        }
+    }
+}
+
+/// The long-press peek for a saved post: its lead media large, with the author and text.
+private struct PostPeek: View {
+    let summary: ArchivedPostSummary
+    let store: ArchiveStore
+    @State private var lead: LeadMedia?
+
+    private struct LeadMedia { let url: URL; let type: MediaType }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let lead {
+                ArchivedMediaPreview(url: lead.url, type: lead.type)
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(StashyTheme.hairline)
+                    .frame(height: 200)
+                    .overlay { PlatformIcon(platform: summary.platform, size: 40) }
+            }
+            HStack(spacing: 8) {
+                PlatformIcon(platform: summary.platform, size: 20)
+                Text(summary.author).font(.headline)
+            }
+            if !summary.text.isEmpty {
+                Text(summary.text).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+            }
+        }
+        .frame(width: 360)
+        .padding(14)
+        .task(id: summary.id) {
+            guard let manifest = try? await store.loadManifest(id: summary.id),
+                  let first = manifest.orderedMedia.min(by: { $0.orderIndex < $1.orderIndex }),
+                  let filename = first.localFilename,
+                  let url = await store.localMediaURL(archiveID: summary.id, filename: filename)
+            else { return }
+            lead = LeadMedia(url: url, type: first.type)
         }
     }
 }

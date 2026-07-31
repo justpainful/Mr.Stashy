@@ -53,6 +53,8 @@
 "media.audio" = "صوت";
 "media.gif" = "صورة متحركة";
 "media.selection" = "تحديد الوسائط";
+"media.include" = "تضمين في الحفظ";
+"media.exclude" = "استبعاد من الحفظ";
 "media.unknownDimensions" = "الأبعاد غير متاحة";
 
 "library.scope.all" = "الكل";

@@ -5,6 +5,10 @@ struct CatchView: View {
     @State private var urlText = ""
     @State private var showCapabilities = false
     @State private var selectedSource: Platform?
+    @State private var reviewPost: ResolvedPost?
+    /// The post most recently opened for review, so returning from it does not immediately
+    /// re-open the same review.
+    @State private var lastReviewedID: UUID?
 
     var body: some View {
         ZStack {
@@ -20,6 +24,16 @@ struct CatchView: View {
             }
         }
         .navigationTitle(L10n.value("tab.catch"))
+        // The review opens itself the moment a link resolves — no extra tap to see what was
+        // found. The card in the ready state stays as a way back in after returning.
+        .navigationDestination(item: $reviewPost) { post in
+            ResultsView(post: post)
+        }
+        .onChange(of: readyPost, initial: true) { _, post in
+            guard let post, post.id != lastReviewedID else { return }
+            lastReviewedID = post.id
+            reviewPost = post
+        }
         // A link shared from another app can arrive while this screen is already visible, so it
         // is consumed whenever the shared list changes, not only when the view first appears.
         // The busy flag is part of the key so the next link is taken when the current one
@@ -29,6 +43,11 @@ struct CatchView: View {
         .sheet(item: $selectedSource) { platform in
             PlatformPasteSheet(platform: platform, urlText: $urlText)
         }
+    }
+
+    private var readyPost: ResolvedPost? {
+        if case .ready(let post) = appState.catchState { return post }
+        return nil
     }
 
     private var sharedLinkKey: String {
@@ -140,8 +159,9 @@ struct CatchView: View {
             .accessibilityIdentifier("catch.resolving")
         case .ready(let post):
             VStack(alignment: .leading, spacing: 10) {
-                NavigationLink {
-                    ResultsView(post: post)
+                Button {
+                    lastReviewedID = post.id
+                    reviewPost = post
                 } label: {
                     ResultReadyRow(post: post)
                 }

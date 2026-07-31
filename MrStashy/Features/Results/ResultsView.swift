@@ -37,13 +37,26 @@ struct ResultsView: View {
                     if !post.text.isEmpty { Text(post.text).textSelection(.enabled).font(.body) }
                     if let quote = post.quotedPost { QuotedPostView(quote: quote) }
                     mediaList
-                    actionBar
-                    if let queuedMode { savedConfirmation(queuedMode) }
                 }
                 .padding(20)
+                .padding(.bottom, 8)
             }
         }
+        // The save actions live in a pinned bar at the bottom, in easy thumb reach, instead of
+        // floating in the scroll where they were easy to miss and awkwardly shaped.
+        .safeAreaInset(edge: .bottom) { bottomBar }
         .navigationTitle(L10n.value("results.title"))
+        .toolbar {
+            if !post.text.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showTextCard = true } label: {
+                        Image(systemName: "text.badge.plus")
+                    }
+                    .accessibilityLabel(Text(L10n.value("results.textCard")))
+                    .accessibilityIdentifier("results.textCard")
+                }
+            }
+        }
         .sheet(isPresented: $showTextCard) { TextCardComposer(post: post) }
         .confirmationDialog(L10n.value("results.quality.title"), isPresented: Binding(
             get: { pendingSaveMode != nil },
@@ -166,16 +179,24 @@ struct ResultsView: View {
         return media.type == .video ? 16.0 / 9.0 : 3.0 / 4.0
     }
 
-    private var actionBar: some View {
-        StashyGlassBar {
-            saveButtons
-            Button { showTextCard = true } label: { Label(L10n.value("results.textCard"), systemImage: "text.badge.plus") }
-                .buttonStyle(.glass)
-                .disabled(post.text.isEmpty)
-                .accessibilityIdentifier("results.textCard")
+    /// The pinned bottom bar. It either offers the two save actions or, once a save is under
+    /// way, confirms it and points to the queue and library.
+    @ViewBuilder private var bottomBar: some View {
+        Group {
+            if let queuedMode {
+                savedConfirmation(queuedMode)
+            } else {
+                HStack(spacing: 12) { saveButtons }
+            }
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+        .background(.bar)
     }
 
+    // The default save mode is the prominent button; whichever it is, both stretch to fill half
+    // the bar so the pair reads as one clear choice.
     @ViewBuilder private var saveButtons: some View {
         if appState.settings.saveMode == .mediaOnly {
             fullPostButton.buttonStyle(.glass)
@@ -189,6 +210,8 @@ struct ResultsView: View {
     private var fullPostButton: some View {
         Button { requestSave(.fullPost) } label: {
             Label(L10n.value("results.saveFull"), systemImage: "archivebox")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
         }
         .disabled(queuedMode != nil || (selectedMediaIDs.isEmpty && !post.media.isEmpty))
         .accessibilityIdentifier("results.saveFull")
@@ -197,6 +220,8 @@ struct ResultsView: View {
     private var mediaOnlyButton: some View {
         Button { requestSave(.mediaOnly) } label: {
             Label(L10n.value("results.saveMedia"), systemImage: "arrow.down.to.line")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
         }
         .disabled(queuedMode != nil || selectedMediaIDs.isEmpty)
         .accessibilityIdentifier("results.saveMedia")
@@ -254,6 +279,21 @@ private struct MediaSelectionCard: View {
                 .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
+        // A long press peeks the item at a larger size and offers to include or drop it.
+        .contextMenu {
+            Button {
+                action()
+            } label: {
+                Label(
+                    L10n.value(isSelected ? "media.exclude" : "media.include"),
+                    systemImage: isSelected ? "minus.circle" : "checkmark.circle"
+                )
+            }
+        } preview: {
+            RemoteMediaThumbnail(media: media, cornerRadius: 0)
+                .aspectRatio(peekRatio, contentMode: .fit)
+                .frame(width: 340)
+        }
         // Each card names the item it belongs to and reports its own selected state, so the
         // grid is navigable rather than a run of identically labelled buttons.
         .accessibilityLabel(Text(L10n.format(
@@ -264,6 +304,13 @@ private struct MediaSelectionCard: View {
         .accessibilityValue(Text(MediaCardMetadata.summary(for: media)))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("results.media.\(media.orderIndex)")
+    }
+
+    private var peekRatio: CGFloat {
+        if let width = media.width, let height = media.height, width > 0, height > 0 {
+            return min(max(CGFloat(width) / CGFloat(height), 0.6), 1.6)
+        }
+        return media.type == .video ? 16.0 / 9.0 : 3.0 / 4.0
     }
 }
 

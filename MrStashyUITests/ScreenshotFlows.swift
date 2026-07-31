@@ -25,9 +25,10 @@ final class ScreenshotFlows: XCTestCase {
 
         app.terminate()
         app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "--ui-results-fixture"])
-        let result = app.buttons["catch.results"]
-        XCTAssertTrue(result.waitForExistence(timeout: 8))
-        result.tap()
+        // The review opens itself once the fixture resolves, so the first media card is what to
+        // wait for rather than a button that has to be tapped to reach it.
+        let firstCard = app.buttons["results.media.0"]
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 10))
         capture(app, named: "results-mixed-media.png")
         app.buttons["results.textCard"].tap()
         capture(app, named: "text-card-composer.png")

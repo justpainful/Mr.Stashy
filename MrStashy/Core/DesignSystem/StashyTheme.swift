@@ -1,15 +1,18 @@
 import SwiftUI
 
 enum StashyTheme {
-    static let cream = Color(red: 1.00, green: 0.97, blue: 0.94)
-    static let charcoal = Color(red: 0.14, green: 0.12, blue: 0.18)
-    static let lavender = Color(red: 0.45, green: 0.37, blue: 0.84)
-    static let butter = Color(red: 1.00, green: 0.75, blue: 0.31)
-    static let pink = Color(red: 0.94, green: 0.34, blue: 0.47)
-    static let aqua = Color(red: 0.34, green: 0.77, blue: 0.84)
+    // A cleaner, less orange warm-white so the pastel surfaces read as modern rather than dated.
+    static let cream = Color(red: 0.98, green: 0.98, blue: 0.97)
+    static let charcoal = Color(red: 0.13, green: 0.11, blue: 0.17)
+    // Deeper, more saturated violet/indigo accents. They carry white button text at a higher
+    // contrast and give the interface a more deliberate, less washed-out feel.
+    static let lavender = Color(red: 0.40, green: 0.30, blue: 0.92)
+    static let butter = Color(red: 1.00, green: 0.72, blue: 0.26)
+    static let pink = Color(red: 0.95, green: 0.30, blue: 0.44)
+    static let aqua = Color(red: 0.24, green: 0.72, blue: 0.82)
     // Kept as the semantic success/action token for compatibility; it is indigo, not green.
-    static let green = Color(red: 0.39, green: 0.31, blue: 0.76)
-    static let darkSurface = Color(red: 0.10, green: 0.09, blue: 0.14)
+    static let green = Color(red: 0.34, green: 0.25, blue: 0.86)
+    static let darkSurface = Color(red: 0.09, green: 0.09, blue: 0.13)
     static let surface = Color(uiColor: .secondarySystemBackground)
 
     /// Primary text. Fixed charcoal disappears on the dark background, so the token resolves
