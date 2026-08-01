@@ -169,9 +169,11 @@ final class AppState {
     private static func screenshotPost(isArabic: Bool) -> ResolvedPost {
         ResolvedPost(
         id: UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!,
-        platform: .directMedia,
-        originalURL: URL(string: "https://example.invalid/screenshot-post")!,
-        canonicalURL: URL(string: "https://example.invalid/screenshot-post")!,
+        // An X post so the screenshots exercise the platform-faithful replica, not the generic
+        // fallback. The living-post capture then shows the x.com-style card.
+        platform: .x,
+        originalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
+        canonicalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
         author: ResolvedAuthor(platformID: nil, displayName: isArabic ? "أرشيف تجريبي" : "Sample archive", username: isArabic ? "تجربة" : "sample", avatarURL: nil, profileURL: nil, badges: []),
         text: isArabic ? "منشور تجريبي يحفظ صورة وفيديو وصورة متحركة بالترتيب الأصلي." : "A local screenshot fixture with a photo, video, and GIF in original order.",
         createdAt: Date(timeIntervalSince1970: 1_700_000_000),
