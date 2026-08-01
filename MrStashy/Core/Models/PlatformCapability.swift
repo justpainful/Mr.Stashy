@@ -17,26 +17,22 @@ enum PlatformCapabilityRegistry {
         .init(
             platform: .x,
             status: .passing,
-            evidence: "Reads the public post payload that X publishes for embedded posts, keeping every photo and the highest-bitrate video the post exposes, in order.",
-            unlockCredential: .xBearerToken
+            evidence: "Reads the public post payload that X publishes for embedded posts, keeping every photo and the highest-bitrate video the post exposes, in order."
         ),
         .init(
             platform: .imgur,
             status: .passing,
-            evidence: "Resolves the public asset address for the post identifier and confirms the host serves it before saving.",
-            unlockCredential: .imgurClientID
+            evidence: "Resolves the public asset address for the post identifier and confirms the host serves it before saving."
         ),
         .init(
             platform: .tikTok,
             status: .limited,
-            evidence: "Saves the playable file when the public page publishes one. When it does not, the cover image is saved and the capture is labelled as cover-only rather than presented as the video.",
-            unlockCredential: .tikTokAccessToken
+            evidence: "Saves the playable file when the public page publishes one. When it does not, the cover image is saved and the capture is labelled as cover-only rather than presented as the video."
         ),
         .init(
             platform: .pinterest,
             status: .limited,
-            evidence: "Reads the pin's own public widget payload for the original-size image or video rendition. Private and secret boards are not readable.",
-            unlockCredential: .pinterestAccessToken
+            evidence: "Reads the pin's own public widget payload for the original-size image or video rendition. Private and secret boards are not readable."
         ),
         .init(
             platform: .kick,
@@ -46,8 +42,7 @@ enum PlatformCapabilityRegistry {
         .init(
             platform: .tumblr,
             status: .limited,
-            evidence: "Saves the media a public post publishes in its preview metadata. Posts behind a blog's content screen are not readable.",
-            unlockCredential: .tumblrAPIKey
+            evidence: "Saves the media a public post publishes in its preview metadata. Posts behind a blog's content screen are not readable."
         ),
         .init(
             platform: .snapchat,
@@ -61,15 +56,13 @@ enum PlatformCapabilityRegistry {
         ),
         .init(
             platform: .instagram,
-            status: .needsCredential,
-            evidence: "A public post that still publishes preview metadata is saved. Instagram answers most signed-out requests with a login page, which Stashy reports as needing access rather than as an empty post.",
-            unlockCredential: .instagramAccessToken
+            status: .limited,
+            evidence: "A public post that still publishes preview metadata is saved. Instagram answers most signed-out requests with a login page, and those posts cannot be captured without an account, which Stashy never uses."
         ),
         .init(
             platform: .threads,
-            status: .needsCredential,
-            evidence: "Threads redirects signed-out readers to a login page, so only posts that still publish preview metadata can be saved.",
-            unlockCredential: .threadsAccessToken
+            status: .limited,
+            evidence: "Threads redirects signed-out readers to a login page, so only posts that still publish preview metadata can be saved."
         ),
         .init(
             platform: .discord,

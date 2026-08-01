@@ -37,7 +37,6 @@ struct SettingsView: View {
                 Section(L10n.value("settings.sources")) {
                     Button(L10n.value("settings.platformDiagnostics")) { showDiagnostics = true }
                         .accessibilityIdentifier("settings.platformDiagnostics")
-                    NavigationLink(L10n.value("settings.credentials")) { ResolverCredentialsView() }
                 }
                 Section(L10n.value("settings.privacy")) {
                     Text(L10n.value("settings.privacy.body"))
@@ -159,83 +158,9 @@ private struct CapabilityRow: View {
                 .font(.caption)
                 .foregroundStyle(StashyTheme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if let credential = capability.unlockCredential {
-                Label(L10n.format("settings.credentials.unlocks", L10n.value(credential.titleKey)), systemImage: "key")
-                    .font(.caption2)
-                    .foregroundStyle(StashyTheme.inkSecondary)
-            }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("diagnostics.\(capability.platform.rawValue)")
-    }
-}
-
-/// Lets the owner of a developer account supply their own key so a source that publishes more
-/// to an authorized reader can be captured in full. Values go straight to the Keychain and are
-/// never written to settings, manifests, archives, diagnostics, or logs.
-struct ResolverCredentialsView: View {
-    @Environment(AppState.self) private var appState
-    @State private var drafts: [ResolverCredential: String] = [:]
-    @State private var stored: Set<ResolverCredential> = []
-
-    var body: some View {
-        Form {
-            Section {
-                Text(L10n.value("settings.credentials.body"))
-                    .font(.footnote)
-                    .foregroundStyle(StashyTheme.inkSecondary)
-            }
-            ForEach(ResolverCredential.allCases, id: \.self) { credential in
-                Section(L10n.value(credential.titleKey)) {
-                    Text(L10n.value(credential.helpKey))
-                        .font(.caption)
-                        .foregroundStyle(StashyTheme.inkSecondary)
-                    SecureField(
-                        L10n.value("settings.credentials.placeholder"),
-                        text: Binding(
-                            get: { drafts[credential] ?? "" },
-                            set: { drafts[credential] = $0 }
-                        )
-                    )
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    HStack {
-                        Button(L10n.value("settings.credentials.save")) { save(credential) }
-                            .disabled((drafts[credential] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Spacer()
-                        if stored.contains(credential) {
-                            Button(L10n.value("settings.credentials.remove"), role: .destructive) { remove(credential) }
-                        }
-                    }
-                    if stored.contains(credential) {
-                        Label(L10n.value("settings.credentials.stored"), systemImage: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(StashyTheme.green)
-                    }
-                }
-            }
-        }
-        .navigationTitle(L10n.value("settings.credentials"))
-        .task { refreshStored() }
-    }
-
-    private func refreshStored() {
-        stored = Set(ResolverCredential.allCases.filter { KeychainStore.resolverCredential(for: $0) != nil })
-    }
-
-    private func save(_ credential: ResolverCredential) {
-        do {
-            try KeychainStore.saveResolverCredential(drafts[credential] ?? "", for: credential)
-            drafts[credential] = ""
-            refreshStored()
-        } catch {
-            appState.lastError = UserVisibleError(message: error.localizedDescription)
-        }
-    }
-
-    private func remove(_ credential: ResolverCredential) {
-        KeychainStore.deleteResolverCredential(for: credential)
-        refreshStored()
     }
 }
