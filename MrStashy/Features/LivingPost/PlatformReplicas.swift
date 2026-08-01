@@ -12,6 +12,17 @@ struct PlayerItem: Identifiable, Equatable {
     let url: URL
 }
 
+extension ResolvedAuthor {
+    /// A verification tick is only ever shown when the source actually reported the account as
+    /// verified — never by default.
+    var isVerified: Bool {
+        badges.contains { badge in
+            let value = badge.lowercased()
+            return value.contains("verified") || value.contains("check") || value == "blue"
+        }
+    }
+}
+
 // MARK: - Full-screen player
 
 /// The dedicated player a video opens into when tapped: black, full-bleed, with native controls.
@@ -204,12 +215,13 @@ struct XPostReplica: View {
     let archiveID: UUID
     let onPlay: (URL) -> Void
 
+    // x.com's dark ("lights out") palette: a true-black card, white text, muted grey handle.
     private enum Palette {
-        static let card = Color.white
-        static let text = Color(red: 0.06, green: 0.06, blue: 0.07)
-        static let secondary = Color(red: 0.325, green: 0.392, blue: 0.443)
+        static let card = Color.black
+        static let text = Color.white
+        static let secondary = Color(red: 0.44, green: 0.48, blue: 0.52)
         static let blue = Color(red: 0.114, green: 0.631, blue: 0.949)
-        static let border = Color(red: 0.90, green: 0.92, blue: 0.93)
+        static let border = Color(red: 0.18, green: 0.19, blue: 0.20)
     }
 
     var body: some View {
@@ -219,14 +231,16 @@ struct XPostReplica: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         Text(manifest.author.displayName).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text)
-                        Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(Palette.blue)
+                        if manifest.author.isVerified {
+                            Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(Palette.blue)
+                        }
                     }
                     if let username = manifest.author.username {
                         Text("@\(username)").font(.system(size: 15)).foregroundStyle(Palette.secondary)
                     }
                 }
                 Spacer()
-                Image(systemName: "xmark.square.fill").font(.system(size: 22)).foregroundStyle(Palette.text)
+                Text("𝕏").font(.system(size: 22, weight: .black)).foregroundStyle(Palette.text)
                     .accessibilityHidden(true)
             }
             if !manifest.text.isEmpty {
@@ -247,7 +261,7 @@ struct XPostReplica: View {
         .padding(16)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Palette.border, lineWidth: 1) }
-        .environment(\.colorScheme, .light)
+        .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder private var mediaBlock: some View {
@@ -299,12 +313,19 @@ struct TikTokPostReplica: View {
     let archiveID: UUID
     let onPlay: (URL) -> Void
 
-    private static let pink = Color(red: 0.996, green: 0.173, blue: 0.333)
-
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black
-            if let media = manifest.orderedMedia.first {
+            if manifest.orderedMedia.count > 1 {
+                TabView {
+                    ForEach(manifest.orderedMedia, id: \.mediaID) { media in
+                        ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+            } else if let media = manifest.orderedMedia.first {
                 ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
@@ -366,11 +387,22 @@ struct InstagramPostReplica: View {
                 ReplicaAvatar(author: manifest.author, size: 36)
                 Text(manifest.author.username ?? manifest.author.displayName)
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.text)
+                if manifest.author.isVerified {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(Color(red: 0.13, green: 0.52, blue: 0.96))
+                }
                 Spacer()
                 Image(systemName: "ellipsis").foregroundStyle(Palette.text)
             }
             .padding(12)
-            if let media = manifest.orderedMedia.first {
+            if manifest.orderedMedia.count > 1 {
+                TabView {
+                    ForEach(manifest.orderedMedia, id: \.mediaID) { media in
+                        ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .aspectRatio(1, contentMode: .fit)
+            } else if let media = manifest.orderedMedia.first {
                 ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, onPlay: onPlay)
                     .frame(maxHeight: 460)
                     .clipped()
@@ -411,6 +443,8 @@ struct InstagramPostReplica: View {
 // MARK: - Generic (every other source)
 
 struct GenericPostReplica: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     let manifest: ArchiveManifest
     let archiveID: UUID
     let onPlay: (URL) -> Void
@@ -445,7 +479,87 @@ struct GenericPostReplica: View {
             }
         }
         .padding(16)
-        .background(StashyTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(StashyTheme.cardSurface(for: appState.settings.theme, colorScheme: colorScheme), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(accent.opacity(0.28), lineWidth: 1) }
+    }
+}
+
+// MARK: - Branded replicas for the remaining platforms
+
+/// The signature colours of one platform, so its saved post wears that platform's skin.
+struct BrandKit {
+    let background: Color
+    let text: Color
+    let secondary: Color
+    let accent: Color
+    let dark: Bool
+}
+
+enum PlatformBrand {
+    static func kit(for platform: Platform) -> BrandKit {
+        switch platform {
+        case .youTube:
+            return BrandKit(background: Color(red: 0.09, green: 0.09, blue: 0.09), text: .white, secondary: Color(red: 0.67, green: 0.67, blue: 0.68), accent: Color(red: 1.00, green: 0.00, blue: 0.00), dark: true)
+        case .pinterest:
+            return BrandKit(background: .white, text: Color(red: 0.07, green: 0.07, blue: 0.07), secondary: Color(red: 0.46, green: 0.46, blue: 0.49), accent: Color(red: 0.90, green: 0.00, blue: 0.12), dark: false)
+        case .snapchat:
+            return BrandKit(background: Color(red: 1.00, green: 0.988, blue: 0.00), text: .black, secondary: Color(red: 0.25, green: 0.25, blue: 0.20), accent: .black, dark: false)
+        case .tumblr:
+            return BrandKit(background: Color(red: 0.00, green: 0.11, blue: 0.24), text: .white, secondary: Color(red: 0.62, green: 0.70, blue: 0.80), accent: Color(red: 0.34, green: 0.53, blue: 0.75), dark: true)
+        case .kick:
+            return BrandKit(background: Color(red: 0.05, green: 0.05, blue: 0.06), text: .white, secondary: Color(red: 0.62, green: 0.64, blue: 0.62), accent: Color(red: 0.33, green: 0.99, blue: 0.10), dark: true)
+        case .imgur:
+            return BrandKit(background: Color(red: 0.11, green: 0.11, blue: 0.12), text: .white, secondary: Color(red: 0.62, green: 0.63, blue: 0.64), accent: Color(red: 0.11, green: 0.72, blue: 0.43), dark: true)
+        default:
+            return BrandKit(background: Color(red: 0.12, green: 0.12, blue: 0.14), text: .white, secondary: Color(red: 0.62, green: 0.62, blue: 0.64), accent: platform.sourceStyle.accent, dark: true)
+        }
+    }
+}
+
+/// A faithful-enough branded card for platforms without a bespoke replica: it wears the
+/// platform's colours and logo so a saved YouTube, Pinterest, Snapchat, Tumblr, Kick, or Imgur
+/// post still reads as itself rather than as a neutral archive row.
+struct BrandedPostReplica: View {
+    let manifest: ArchiveManifest
+    let archiveID: UUID
+    let onPlay: (URL) -> Void
+
+    private var brand: BrandKit { PlatformBrand.kit(for: manifest.platform) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ReplicaAvatar(author: manifest.author, size: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(manifest.author.displayName).font(.system(size: 15, weight: .bold)).foregroundStyle(brand.text)
+                        if manifest.author.isVerified {
+                            Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(brand.accent)
+                        }
+                    }
+                    if let username = manifest.author.username {
+                        Text("@\(username)").font(.system(size: 14)).foregroundStyle(brand.secondary)
+                    }
+                }
+                Spacer()
+                PlatformIcon(platform: manifest.platform, size: 26)
+            }
+            if !manifest.text.isEmpty {
+                Text(manifest.text).font(.system(size: 16)).foregroundStyle(brand.text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(manifest.orderedMedia, id: \.mediaID) { media in
+                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 14, onPlay: onPlay)
+                    .frame(maxHeight: 460)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            Text((manifest.timestamp ?? manifest.savedAt).formatted(date: .abbreviated, time: .shortened))
+                .font(.system(size: 13)).foregroundStyle(brand.secondary)
+        }
+        .padding(16)
+        .background(brand.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(brand.accent.opacity(0.35), lineWidth: 1) }
+        .environment(\.colorScheme, brand.dark ? .dark : .light)
     }
 }

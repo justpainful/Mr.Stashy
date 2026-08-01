@@ -62,12 +62,12 @@ struct LibraryView: View {
         } message: {
             Text(L10n.value("library.delete.message"))
         }
-        .sheet(item: $presentedArchive) { route in
+        // A saved post opens full-screen so the platform replica has the whole page, not a
+        // half-height sheet.
+        .fullScreenCover(item: $presentedArchive) { route in
             NavigationStack {
                 LivingPostView(archiveID: route.archiveID)
             }
-            .presentationDetents([.medium, .large])
-            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
         .alert(L10n.value("library.collection.create"), isPresented: $showCreateCollection) {
             TextField(L10n.value("library.collection.name"), text: $collectionName)

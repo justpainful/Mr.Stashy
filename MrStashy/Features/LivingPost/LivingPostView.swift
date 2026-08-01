@@ -77,6 +77,8 @@ struct LivingPostView: View {
             TikTokPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
         case .instagram, .threads:
             InstagramPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
+        case .youTube, .pinterest, .snapchat, .tumblr, .kick, .imgur:
+            BrandedPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
         default:
             GenericPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
         }

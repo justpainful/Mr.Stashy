@@ -46,14 +46,38 @@ enum StashyTheme {
         }
     }
 
+    /// Each theme tints the whole canvas — in dark mode too, so the four dark themes are
+    /// genuinely different backgrounds rather than the same near-black. Text tokens resolve by
+    /// light/dark independently, so they stay legible on every tint.
     static func background(for theme: UserSettings.Theme, colorScheme: ColorScheme) -> Color {
-        guard colorScheme != .dark else { return darkSurface }
+        if colorScheme == .dark {
+            switch theme {
+            case .studio: return Color(red: 0.07, green: 0.07, blue: 0.11)
+            case .citrus: return Color(red: 0.13, green: 0.07, blue: 0.02)
+            case .ember: return Color(red: 0.13, green: 0.04, blue: 0.09)
+            case .ocean: return Color(red: 0.03, green: 0.08, blue: 0.15)
+            }
+        }
         switch theme {
         case .studio: return cream
-        case .citrus: return Color(red: 1.00, green: 0.95, blue: 0.72)
-        case .ember: return Color(red: 1.00, green: 0.91, blue: 0.88)
-        case .ocean: return Color(red: 0.88, green: 0.95, blue: 0.98)
+        case .citrus: return Color(red: 1.00, green: 0.92, blue: 0.60)
+        case .ember: return Color(red: 1.00, green: 0.86, blue: 0.82)
+        case .ocean: return Color(red: 0.80, green: 0.91, blue: 0.98)
         }
+    }
+
+    /// A card/surface colour that also follows the theme, so surfaces feel part of the same
+    /// palette instead of a flat system grey on top of a tinted background.
+    static func cardSurface(for theme: UserSettings.Theme, colorScheme: ColorScheme) -> Color {
+        if colorScheme == .dark {
+            switch theme {
+            case .studio: return Color(red: 0.13, green: 0.13, blue: 0.18)
+            case .citrus: return Color(red: 0.20, green: 0.13, blue: 0.06)
+            case .ember: return Color(red: 0.20, green: 0.10, blue: 0.15)
+            case .ocean: return Color(red: 0.07, green: 0.14, blue: 0.22)
+            }
+        }
+        return Color.white
     }
 
     /// A status colour that stays legible on both backgrounds.
