@@ -79,11 +79,13 @@ struct CatchView: View {
                 .accessibilityLabel(Text(L10n.value("catch.paste")))
                 Button { inspect() } label: {
                     Label(L10n.value("catch.resolve"), systemImage: "sparkle.magnifyingglass")
+                        // The main action takes the rest of the bar rather than sitting in the
+                        // middle of it with a third of the width left empty beside it.
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(appState.catchURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isResolving)
                 .accessibilityIdentifier("catch.resolve")
-                Spacer(minLength: 0)
             }
         }
         .padding(18)

@@ -79,6 +79,32 @@ struct LocalizationTests {
         }
     }
 
+    /// The registry is a `static let` built once, at launch, before anyone has chosen a
+    /// language. Anything it resolves eagerly is frozen in whatever language happened to be
+    /// active then, so the shown text has to be composed on each read.
+    @Test func capabilityExplanationsFollowTheLanguageChosenAfterTheRegistryWasBuilt() {
+        let english = withLanguage(.english) { PlatformCapabilityRegistry.all.map(\.evidence) }
+        let arabic = withLanguage(.arabic) { PlatformCapabilityRegistry.all.map(\.evidence) }
+        #expect(english.count == arabic.count)
+        for (englishText, arabicText) in zip(english, arabic) {
+            #expect(englishText != arabicText, "an explanation did not change with the language")
+            #expect(!arabicText.isEmpty)
+        }
+    }
+
+    /// A source with no completed live check must not be badged as verified, and must say why.
+    @Test func anUnverifiedSourceIsDemotedAndSaysSo() {
+        withLanguage(.english) {
+            let disclaimer = L10n.value("support.evidence.unverified")
+            for capability in PlatformCapabilityRegistry.all where capability.isUnverified {
+                #expect(capability.status != .passing)
+                #expect(capability.evidence.hasSuffix(disclaimer))
+            }
+            // A demotion may never empty the capture picker.
+            #expect(!PlatformCapabilityRegistry.usable.isEmpty)
+        }
+    }
+
     @Test func formattedValuesFollowTheChosenLanguageRatherThanTheDevice() {
         let arabic = withLanguage(.arabic) { L10n.byteCount(1_500_000) }
         let english = withLanguage(.english) { L10n.byteCount(1_500_000) }

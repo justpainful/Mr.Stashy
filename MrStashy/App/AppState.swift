@@ -352,6 +352,10 @@ final class AppState {
         switch item.stage {
         case .failed, .cancelled:
             guard activeSaveTasks[item.id] == nil else { return }
+            // A retry starts over, so last attempt's tally must not be shown against it.
+            if let index = queueItems.firstIndex(where: { $0.id == item.id }) {
+                queueItems[index].savedMediaCount = nil
+            }
             updateQueueItem(id: item.id, stage: .waiting, progress: 0)
             startSave(item)
         default:

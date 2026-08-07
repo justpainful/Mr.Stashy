@@ -291,10 +291,19 @@ struct PlatformCapability: Codable, Hashable, Sendable, Identifiable {
     var evidenceSource: String
     /// The credential a person can supply themselves to lift this source to a full capture.
     var unlockCredential: ResolverCredential?
+    /// Set when no live check completed for this build, so the description is what the adapter
+    /// is written to do rather than what was last observed.
+    var isUnverified = false
     var id: Platform { platform }
 
-    /// The sentence a person reads.
-    var evidence: String { L10n.localizedIfPresent(evidenceSource) ?? evidenceSource }
+    /// The sentence a person reads. It resolves on every read rather than being baked in, so it
+    /// follows the language picker — the registry itself is built once, at launch, long before
+    /// anyone has chosen a language.
+    var evidence: String {
+        let base = L10n.localizedIfPresent(evidenceSource) ?? evidenceSource
+        guard isUnverified else { return base }
+        return "\(base) \(L10n.value("support.evidence.unverified"))"
+    }
 
     enum CodingKeys: String, CodingKey {
         case platform, status

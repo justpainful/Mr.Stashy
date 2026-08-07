@@ -164,10 +164,16 @@ struct ReplicaMedia: View {
     @ViewBuilder private func naturalContent(_ url: URL) -> some View {
         switch record.type {
         case .video:
-            tappable(url) {
-                LocalMediaThumbnail(url: url, type: .video, cornerRadius: cornerRadius, duration: record.durationSeconds)
-                    .aspectRatio(VideoGeometry.clamped(declaredAspect), contentMode: .fit)
-            }
+            // A post's video plays where the post is, at the video's own shape, the way it did
+            // on the source. The expand control opens the dedicated player for anyone who wants
+            // the whole screen, Picture in Picture, or AirPlay.
+            InlineVideoPlayer(
+                url: url,
+                declaredAspect: declaredAspect,
+                cornerRadius: cornerRadius,
+                onExpand: onPlay
+            )
+            .accessibilityIdentifier("livingPost.media.\(record.orderIndex)")
         case .photo, .gif:
             ArchivedMediaPreview(
                 url: url,
@@ -361,12 +367,16 @@ struct XPostReplica: View {
                 }
             case 3:
                 HStack(spacing: 3) {
-                    tile(media[0], square: true)
+                    // The first runs the full height of the block; the other two are squares
+                    // stacked beside it, which is what sets that height. Making the first one
+                    // square too left black bands above and below it.
+                    tile(media[0], fills: true)
                     VStack(spacing: 3) {
                         tile(media[1], square: true)
                         tile(media[2], square: true)
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
             default:
                 VStack(spacing: 3) {
                     HStack(spacing: 3) {
@@ -388,12 +398,20 @@ struct XPostReplica: View {
         }
     }
 
-    @ViewBuilder private func tile(_ media: ArchivedMediaRecord, corner: CGFloat = 0, square: Bool = false) -> some View {
+    @ViewBuilder private func tile(
+        _ media: ArchivedMediaRecord,
+        corner: CGFloat = 0,
+        square: Bool = false,
+        fills: Bool = false
+    ) -> some View {
+        let mode: ReplicaMediaMode = fills ? .fill : (square ? .square : .natural)
         let item = ReplicaMedia(
             archiveID: archiveID, record: media, cornerRadius: corner,
-            mode: square ? .square : .natural, totalCount: manifest.orderedMedia.count, onPlay: onPlay
+            mode: mode, totalCount: manifest.orderedMedia.count, onPlay: onPlay
         )
-        if square {
+        if fills {
+            item.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if square {
             // `.fit`, not `.fill`: filling asks the tile to cover its slot, which lets it grow
             // past the row and paint over the one beneath it.
             item.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)

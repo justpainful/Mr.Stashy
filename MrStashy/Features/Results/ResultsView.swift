@@ -207,8 +207,9 @@ struct ResultsView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 6)
+        .padding(.vertical, 14)
+        // Six points left the buttons touching the tab bar, so the two ran together as one
+        // crowded strip with no telling where the actions ended.
         .background(.bar)
     }
 

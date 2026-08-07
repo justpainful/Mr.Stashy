@@ -50,9 +50,13 @@ enum PlatformCapabilityRegistry {
                 // to prevent, so an unproven claim is demoted to partial and says why. It is
                 // never demoted to `.notShipped` itself: that would strip every source from the
                 // capture picker over a missing test run rather than a missing capability.
+                //
+                // The disclaimer is a flag, not baked-in text: this list is built once at
+                // launch, and resolving the sentence here would freeze it in whichever language
+                // happened to be active then.
                 var narrowed = capability
                 if narrowed.status == .passing { narrowed.status = .limited }
-                narrowed.evidenceSource = "\(capability.evidence) \(L10n.value("support.evidence.unverified"))"
+                narrowed.isUnverified = true
                 return narrowed
             case .passing, .limited, .needsCredential:
                 return capability
