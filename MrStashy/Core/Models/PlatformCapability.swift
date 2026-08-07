@@ -7,68 +7,26 @@ import Foundation
 /// is generated from a real run and takes precedence when it reports a source as failing or
 /// blocked. The point is that the app never advertises a capture it cannot perform, and never
 /// hides one it can.
+///
+/// The explanations are localisation keys rather than English prose. They are the longest text
+/// in the app and the text that says why a source cannot be captured; leaving them untranslated
+/// put a wall of English under every row of an otherwise Arabic screen.
 enum PlatformCapabilityRegistry {
     static let baseline: [PlatformCapability] = [
-        .init(
-            platform: .directMedia,
-            status: .passing,
-            evidence: "A direct media address is confirmed to serve media before it is offered, then checksummed on the way into the archive."
-        ),
-        .init(
-            platform: .x,
-            status: .passing,
-            evidence: "Reads the public post payload that X publishes for embedded posts, keeping every photo and the highest-bitrate video the post exposes, in order."
-        ),
-        .init(
-            platform: .imgur,
-            status: .passing,
-            evidence: "Resolves the public asset address for the post identifier and confirms the host serves it before saving."
-        ),
-        .init(
-            platform: .tikTok,
-            status: .limited,
-            evidence: "Saves the playable file when the public page publishes one. When it does not, the cover image is saved and the capture is labelled as cover-only rather than presented as the video."
-        ),
-        .init(
-            platform: .pinterest,
-            status: .limited,
-            evidence: "Reads the pin's own public widget payload for the original-size image or video rendition. Private and secret boards are not readable."
-        ),
-        .init(
-            platform: .kick,
-            status: .limited,
-            evidence: "Reads Kick's public clip endpoint. Clips are published as adaptive streams, which are saved as the stream address plus the clip thumbnail."
-        ),
-        .init(
-            platform: .tumblr,
-            status: .limited,
-            evidence: "Saves the media a public post publishes in its preview metadata. Posts behind a blog's content screen are not readable."
-        ),
-        .init(
-            platform: .snapchat,
-            status: .limited,
-            evidence: "Public Spotlight and Story links expose a preview image. Snapchat publishes no downloadable video address for a signed-out reader."
-        ),
-        .init(
-            platform: .youTube,
-            status: .limited,
-            evidence: "Saves the title, channel, and cover image that YouTube publishes through its own oEmbed endpoint. YouTube publishes no file address, so the video stream is not part of the capture."
-        ),
-        .init(
-            platform: .instagram,
-            status: .limited,
-            evidence: "A public post that still publishes preview metadata is saved. Instagram answers most signed-out requests with a login page, and those posts cannot be captured without an account, which Stashy never uses."
-        ),
-        .init(
-            platform: .threads,
-            status: .limited,
-            evidence: "Threads redirects signed-out readers to a login page, so only posts that still publish preview metadata can be saved."
-        ),
-        .init(
-            platform: .discord,
-            status: .blocked,
-            evidence: "Discord support is bot-only and permission-scoped, and no bot token is configured. Stashy never automates a personal Discord account."
-        )
+        .init(platform: .directMedia, status: .passing, evidence: "support.evidence.directMedia"),
+        .init(platform: .x, status: .passing, evidence: "support.evidence.x"),
+        .init(platform: .reddit, status: .passing, evidence: "support.evidence.reddit"),
+        .init(platform: .bluesky, status: .passing, evidence: "support.evidence.bluesky"),
+        .init(platform: .imgur, status: .passing, evidence: "support.evidence.imgur"),
+        .init(platform: .tikTok, status: .limited, evidence: "support.evidence.tikTok"),
+        .init(platform: .pinterest, status: .limited, evidence: "support.evidence.pinterest"),
+        .init(platform: .kick, status: .limited, evidence: "support.evidence.kick"),
+        .init(platform: .tumblr, status: .limited, evidence: "support.evidence.tumblr"),
+        .init(platform: .snapchat, status: .limited, evidence: "support.evidence.snapchat"),
+        .init(platform: .youTube, status: .limited, evidence: "support.evidence.youTube"),
+        .init(platform: .instagram, status: .limited, evidence: "support.evidence.instagram"),
+        .init(platform: .threads, status: .limited, evidence: "support.evidence.threads"),
+        .init(platform: .discord, status: .blocked, evidence: "support.evidence.discord")
     ]
 
     /// The baseline, narrowed by whatever a real contract run proved. Evidence can demote a
@@ -84,9 +42,19 @@ enum PlatformCapabilityRegistry {
             case .failing, .blocked:
                 var narrowed = capability
                 narrowed.status = evidence.status
-                narrowed.evidence = evidence.evidence
+                narrowed.evidenceSource = evidence.evidenceSource
                 return narrowed
-            case .passing, .limited, .needsCredential, .notShipped:
+            case .notShipped:
+                // No live contract completed for this revision. Calling a source Verified on the
+                // strength of a hand-written sentence is exactly what the support screen exists
+                // to prevent, so an unproven claim is demoted to partial and says why. It is
+                // never demoted to `.notShipped` itself: that would strip every source from the
+                // capture picker over a missing test run rather than a missing capability.
+                var narrowed = capability
+                if narrowed.status == .passing { narrowed.status = .limited }
+                narrowed.evidenceSource = "\(capability.evidence) \(L10n.value("support.evidence.unverified"))"
+                return narrowed
+            case .passing, .limited, .needsCredential:
                 return capability
             }
         }

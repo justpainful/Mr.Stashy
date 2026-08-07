@@ -8,10 +8,42 @@ enum StashyTheme {
     // contrast and give the interface a more deliberate, less washed-out feel.
     static let lavender = Color(red: 0.40, green: 0.30, blue: 0.92)
     static let butter = Color(red: 1.00, green: 0.72, blue: 0.26)
-    static let pink = Color(red: 0.95, green: 0.30, blue: 0.44)
+    /// The failure colour. It resolves per appearance because the bright value is only 3.3:1 on
+    /// the light canvases, and a failure reason is the most important text on its screen.
+    static let pink = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.95, green: 0.30, blue: 0.44, alpha: 1)
+            : UIColor(red: 0.76, green: 0.12, blue: 0.27, alpha: 1)
+    })
     static let aqua = Color(red: 0.24, green: 0.72, blue: 0.82)
     // Kept as the semantic success/action token for compatibility; it is indigo, not green.
     static let green = Color(red: 0.34, green: 0.25, blue: 0.86)
+
+    // Two of the palette colours above are fills. Used as *text* they fall well below the 4.5:1
+    // contrast ratio — aqua is 2.2:1 on the light canvases, green 2.8:1 on the dark ones — so
+    // each has a companion token that resolves per appearance, the way `ink` does. The fills stay
+    // as they are, because they carry white glyphs at good contrast in both appearances.
+
+    /// The success/action colour when it is text or an icon rather than a fill.
+    static let greenText = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.66, green: 0.60, blue: 1.00, alpha: 1)
+            : UIColor(red: 0.34, green: 0.25, blue: 0.86, alpha: 1)
+    })
+
+    /// The in-progress colour when it is text rather than a fill or a progress track.
+    static let aquaText = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.24, green: 0.72, blue: 0.82, alpha: 1)
+            : UIColor(red: 0.10, green: 0.42, blue: 0.50, alpha: 1)
+    })
+
+    /// The caution colour as text. Butter is a highlight; on a cream canvas it is unreadable.
+    static let butterText = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.00, green: 0.78, blue: 0.40, alpha: 1)
+            : UIColor(red: 0.55, green: 0.36, blue: 0.02, alpha: 1)
+    })
     static let darkSurface = Color(red: 0.09, green: 0.09, blue: 0.13)
     static let surface = Color(uiColor: .secondarySystemBackground)
 
@@ -92,6 +124,34 @@ enum StashyTheme {
     }
 }
 
+/// A specific point size that still follows Dynamic Type.
+///
+/// The platform replicas need exact sizes to look like the sources they imitate — a 15pt X post
+/// body, a 14pt Instagram caption — but `Font.system(size:)` is frozen: it ignores the text-size
+/// setting entirely, so a person who needs larger text got a saved post they could not read.
+/// `@ScaledMetric` scales the chosen size the way the system scales its own text styles, so the
+/// card keeps its proportions and grows with the setting.
+private struct ScaledSystemFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
+    }
+}
+
+extension View {
+    /// A replica's own point size, scaled for Dynamic Type.
+    func replicaFont(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(ScaledSystemFont(size: size, weight: weight, relativeTo: style))
+    }
+}
+
 struct StashyIllustration: View {
     let name: String
     var maxHeight: CGFloat = 220
@@ -110,20 +170,29 @@ struct StashyIllustration: View {
 struct PlatformIcon: View {
     let platform: Platform
     var size: CGFloat = 32
+    /// Set where the icon sits next to the platform's own name, or on top of a cell that already
+    /// says which source it came from. Without it VoiceOver reads the name twice in a row.
+    var isDecorative = false
+
+    /// Sources whose logo ships in the asset catalogue. Anything else draws a symbol badge in the
+    /// source's own colour rather than the empty rectangle a missing image name produces.
+    private static let bundledArtwork: Set<Platform> = [
+        .tikTok, .instagram, .x, .pinterest, .snapchat, .kick, .threads, .tumblr, .imgur, .youTube, .discord
+    ]
 
     var body: some View {
         Group {
-            if platform == .directMedia {
+            if Self.bundledArtwork.contains(platform) {
+                Image(platform.rawValue)
+                    .resizable()
+                    .scaledToFill()
+            } else {
                 Image(systemName: platform.sourceStyle.symbol)
                     .resizable()
                     .scaledToFit()
                     .padding(size * 0.22)
                     .foregroundStyle(platform.sourceStyle.accent)
                     .background(platform.sourceStyle.accent.opacity(0.16))
-            } else {
-                Image(platform.rawValue)
-                    .resizable()
-                    .scaledToFill()
             }
         }
         .frame(width: size, height: size)
@@ -133,6 +202,7 @@ struct PlatformIcon: View {
                 .stroke(.primary.opacity(0.10), lineWidth: 0.5)
         }
         .accessibilityLabel(Text(L10n.value(platform.titleKey)))
+        .accessibilityHidden(isDecorative)
     }
 }
 
@@ -154,6 +224,8 @@ extension Platform {
         case .tikTok: SourceStyle(accent: StashyTheme.aqua, symbol: "music.note")
         case .instagram: SourceStyle(accent: StashyTheme.pink, symbol: "camera")
         case .x: SourceStyle(accent: Color(red: 0.11, green: 0.61, blue: 0.96), symbol: "at")
+        case .reddit: SourceStyle(accent: Color(red: 1.00, green: 0.27, blue: 0.00), symbol: "bubble.left.and.text.bubble.right")
+        case .bluesky: SourceStyle(accent: Color(red: 0.00, green: 0.52, blue: 1.00), symbol: "cloud.fill")
         case .pinterest: SourceStyle(accent: Color(red: 0.82, green: 0.15, blue: 0.19), symbol: "pin")
         case .snapchat: SourceStyle(accent: StashyTheme.butter, symbol: "bolt")
         case .kick: SourceStyle(accent: Color(red: 0.24, green: 0.74, blue: 0.38), symbol: "play.rectangle")

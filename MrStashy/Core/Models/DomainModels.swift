@@ -1,12 +1,16 @@
 import Foundation
 
 enum Platform: String, Codable, CaseIterable, Sendable, Identifiable {
-    case tikTok, instagram, x, pinterest, snapchat, kick, threads, tumblr, imgur, youTube, discord, directMedia
+    case tikTok, instagram, x, reddit, bluesky, pinterest, snapchat, kick, threads, tumblr, imgur, youTube, discord, directMedia
     var id: String { rawValue }
     var titleKey: String { "platform.\(rawValue)" }
     var hostnames: [String] {
         switch self {
         case .tikTok: ["tiktok.com"]
+        // `redd.it` is Reddit's own short domain; `i.` and `v.` on it are media hosts, which the
+        // direct-media check separates out before a resolver is chosen.
+        case .reddit: ["reddit.com", "redd.it"]
+        case .bluesky: ["bsky.app", "bsky.social"]
         case .instagram: ["instagram.com", "instagr.am", "ig.me"]
         case .x: ["x.com", "twitter.com"]
         // Pinterest publishes country domains, and `pin.it` is its own share shortener.
@@ -189,6 +193,19 @@ struct QueueItem: Identifiable, Equatable {
     var totalBytes: Int64? = nil
     var bytesPerSecond: Double = 0
     var estimatedTimeRemaining: TimeInterval?
+    /// How many items actually reached the archive. `nil` until the save finishes. It exists
+    /// because a source can stop serving an item midway: the save keeps what it got, and the row
+    /// has to report that number rather than the number originally asked for.
+    var savedMediaCount: Int?
+}
+
+/// What a save actually achieved, as distinct from what it was asked to do.
+struct ArchiveSaveOutcome: Sendable {
+    var savedCount: Int
+    var requestedCount: Int
+    var warnings: [String]
+
+    var isPartial: Bool { savedCount < requestedCount }
 }
 
 struct ArchivedPostSummary: Codable, Hashable, Identifiable, Sendable {
@@ -241,6 +258,12 @@ struct ArchivedMediaRecord: Codable, Sendable {
     var localFilename: String?
     var checksumSHA256: String?
     var variant: MediaVariant?
+    /// The description the source published for this item. Keeping it is what lets a saved post
+    /// stay as usable with VoiceOver as the original was.
+    var altText: String?
+    /// A video's or animation's length. Held on the record because the archive is the source of
+    /// truth once the post is saved, and reading it back off the file means decoding it.
+    var durationSeconds: TimeInterval?
 }
 
 /// What Stashy can honestly claim for one source.
@@ -261,15 +284,28 @@ enum SupportStatus: String, Codable, Sendable, CaseIterable {
 struct PlatformCapability: Codable, Hashable, Sendable, Identifiable {
     var platform: Platform
     var status: SupportStatus
-    var evidence: String
+    /// Either a localisation key for a sentence Stashy authored, or the raw sentence a live
+    /// contract run produced for one revision. The shipped baseline uses keys, so the paragraph
+    /// explaining why a source cannot be captured is translated like everything around it; a
+    /// live run's own diagnostic output is generated per revision and passes through as written.
+    var evidenceSource: String
     /// The credential a person can supply themselves to lift this source to a full capture.
     var unlockCredential: ResolverCredential?
     var id: Platform { platform }
 
+    /// The sentence a person reads.
+    var evidence: String { L10n.localizedIfPresent(evidenceSource) ?? evidenceSource }
+
+    enum CodingKeys: String, CodingKey {
+        case platform, status
+        case evidenceSource = "evidence"
+        case unlockCredential
+    }
+
     init(platform: Platform, status: SupportStatus, evidence: String, unlockCredential: ResolverCredential? = nil) {
         self.platform = platform
         self.status = status
-        self.evidence = evidence
+        self.evidenceSource = evidence
         self.unlockCredential = unlockCredential
     }
 }

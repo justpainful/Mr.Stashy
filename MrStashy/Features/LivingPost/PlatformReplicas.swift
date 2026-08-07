@@ -5,6 +5,10 @@ import SwiftUI
 // TikTok like TikTok, an Instagram post like Instagram — so the archive feels like the post was
 // kept, not merely downloaded as loose files. Each replica renders from the archive manifest and
 // the media already on the device.
+//
+// Looking like the source is not a licence to be unreadable. Every point size here is scaled for
+// Dynamic Type, every decorative glyph is hidden from VoiceOver, every real control is labelled,
+// and every palette clears the 4.5:1 contrast ratio for the text it carries.
 
 /// A URL wrapped for `fullScreenCover(item:)`, which needs an Identifiable value.
 struct PlayerItem: Identifiable, Equatable {
@@ -21,40 +25,26 @@ extension ResolvedAuthor {
             return value.contains("verified") || value.contains("check") || value == "blue"
         }
     }
+
+    /// The handle, wrapped so it keeps its own direction inside an Arabic card. Without the
+    /// isolate, "@stashy" next to Arabic text has its "@" thrown to the wrong end.
+    var displayHandle: String? {
+        guard let username, !username.isEmpty else { return nil }
+        return L10n.isolated("@\(username)")
+    }
 }
 
-// MARK: - Full-screen player
-
-/// The dedicated player a video opens into when tapped: black, full-bleed, with native controls.
-struct FullScreenVideoPlayer: View {
-    let url: URL
-    @Environment(\.dismiss) private var dismiss
-    @State private var player: AVPlayer?
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.black.ignoresSafeArea()
-            if let player {
-                VideoPlayer(player: player).ignoresSafeArea()
-            } else {
-                ProgressView().tint(.white)
-            }
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(12)
-                    .background(.black.opacity(0.5), in: Circle())
-            }
-            .padding(16)
-            .accessibilityLabel(Text(L10n.value("action.done")))
-        }
-        .task {
-            let created = AVPlayer(url: url)
-            player = created
-            created.play()
-        }
-        .onDisappear { player?.pause() }
+extension ArchiveManifest {
+    /// The date line a replica shows.
+    ///
+    /// A replica is convincing by design, which makes a wrong date in it maximally believable.
+    /// Falling back to the day the archive was written meant a 2019 post appeared, inside a
+    /// pixel-faithful card, as though it had been posted today. When the source published no
+    /// date, the card says which date it is showing instead of quietly substituting one.
+    func timestampLabel(dateOnly: Bool = false) -> String {
+        let time: Date.FormatStyle.TimeStyle = dateOnly ? .omitted : .shortened
+        if let timestamp { return L10n.date(timestamp, time: time) }
+        return L10n.format("livingPost.savedOn", L10n.date(savedAt, time: time))
     }
 }
 
@@ -69,15 +59,17 @@ enum ReplicaMediaMode {
     case fill
 }
 
-/// One media item inside a replica: photos and GIFs render inline; a video shows its poster with
-/// a play button and opens the dedicated player when tapped. A long press peeks it larger and
-/// offers to save or share.
+/// One media item inside a replica: photos and GIFs render inline, audio plays in place, and a
+/// video shows its poster with a play button and opens the dedicated player when tapped. A long
+/// press peeks it larger and offers to save or share.
 struct ReplicaMedia: View {
     @Environment(AppState.self) private var appState
     let archiveID: UUID
     let record: ArchivedMediaRecord
     var cornerRadius: CGFloat = 14
     var mode: ReplicaMediaMode = .natural
+    /// How many items the post holds, so each one can say which of them it is.
+    var totalCount: Int = 1
     let onPlay: (URL) -> Void
     @State private var localURL: URL?
     @State private var savedToPhotos = false
@@ -106,11 +98,36 @@ struct ReplicaMedia: View {
                 }
             } preview: {
                 if let localURL {
-                    ArchivedMediaPreview(url: localURL, type: record.type)
-                        .frame(width: 360)
-                        .padding(8)
+                    // A context-menu preview is a picture, not a control: iOS renders it without
+                    // touch handling, so a player here would draw buttons that do nothing.
+                    ArchivedMediaPreview(
+                        url: localURL,
+                        type: record.type,
+                        declaredAspect: declaredAspect,
+                        accessibilityText: record.altText,
+                        duration: record.durationSeconds,
+                        isInteractive: false
+                    )
+                    .frame(width: 360)
+                    .padding(8)
                 }
             }
+    }
+
+    /// The name every item in this post shares, so a four-image post is four distinguishable
+    /// elements rather than four identical "button"s.
+    private var itemName: Text {
+        Text(L10n.format(
+            "media.item.accessibility",
+            record.type.shortLabel,
+            Int64(record.orderIndex + 1),
+            Int64(max(totalCount, record.orderIndex + 1))
+        ))
+    }
+
+    private var declaredAspect: CGFloat? {
+        guard let width = record.variant?.width, let height = record.variant?.height, width > 0, height > 0 else { return nil }
+        return CGFloat(width) / CGFloat(height)
     }
 
     @ViewBuilder private var content: some View {
@@ -120,12 +137,14 @@ struct ReplicaMedia: View {
                 naturalContent(localURL)
             case .square:
                 tappable(localURL) {
-                    LocalMediaThumbnail(url: localURL, type: record.type, cornerRadius: cornerRadius)
+                    LocalMediaThumbnail(url: localURL, type: record.type, cornerRadius: cornerRadius, duration: record.durationSeconds)
+                        .frame(maxWidth: .infinity)
                         .aspectRatio(1, contentMode: .fit)
                 }
             case .fill:
                 tappable(localURL) {
-                    LocalMediaThumbnail(url: localURL, type: record.type, cornerRadius: cornerRadius)
+                    LocalMediaThumbnail(url: localURL, type: record.type, cornerRadius: cornerRadius, duration: record.durationSeconds)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         } else {
@@ -133,6 +152,7 @@ struct ReplicaMedia: View {
                 .fill(Color.gray.opacity(0.15))
                 .frame(height: 220)
                 .overlay { ProgressView() }
+                .accessibilityLabel(Text(L10n.value("livingPost.loading")))
         }
     }
 
@@ -140,36 +160,40 @@ struct ReplicaMedia: View {
         switch record.type {
         case .video:
             tappable(url) {
-                LocalMediaThumbnail(url: url, type: .video, cornerRadius: cornerRadius)
-                    .aspectRatio(videoAspect, contentMode: .fit)
+                LocalMediaThumbnail(url: url, type: .video, cornerRadius: cornerRadius, duration: record.durationSeconds)
+                    .aspectRatio(VideoGeometry.clamped(declaredAspect), contentMode: .fit)
             }
         case .photo, .gif:
-            ArchivedMediaPreview(url: url, type: record.type)
+            ArchivedMediaPreview(
+                url: url,
+                type: record.type,
+                declaredAspect: declaredAspect,
+                accessibilityText: record.altText
+            )
         case .audio:
-            Link(destination: url) {
-                Label(L10n.value("livingPost.openMedia"), systemImage: "waveform")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.bordered)
+            // Saved audio plays here. Handing the file to another app to hear what Stashy saved
+            // was the one media kind the archive could not actually show you.
+            AudioPlaybackView(url: url, title: record.altText)
         }
     }
 
-    /// A video is tappable to open the player; a still just displays.
+    /// A video is tappable to open the player; a still just displays. Both are named, because an
+    /// unlabelled image button is indistinguishable from every other one in the same post.
     @ViewBuilder private func tappable<Label: View>(_ url: URL, @ViewBuilder _ label: () -> Label) -> some View {
         if record.type == .video {
             Button { onPlay(url) } label: { label() }
                 .buttonStyle(.plain)
+                .accessibilityLabel(itemName)
+                .accessibilityHint(Text(L10n.value("media.playback.hint")))
+                .accessibilityAddTraits(.startsMediaSession)
+                .accessibilityIdentifier("livingPost.media.\(record.orderIndex)")
         } else {
             label()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(record.altText.map(Text.init) ?? itemName)
+                .accessibilityAddTraits(.isImage)
+                .accessibilityIdentifier("livingPost.media.\(record.orderIndex)")
         }
-    }
-
-    private var videoAspect: CGFloat {
-        if let width = record.variant?.width, let height = record.variant?.height, width > 0, height > 0 {
-            return min(max(CGFloat(width) / CGFloat(height), 0.5), 1.9)
-        }
-        return 16.0 / 9.0
     }
 
     private func save(_ url: URL) async {
@@ -182,6 +206,8 @@ struct ReplicaMedia: View {
     }
 }
 
+/// The author's picture. It is decoration: the name it sits beside is the information, and an
+/// unlabelled image in a header only adds a stop VoiceOver has nothing to say about.
 private struct ReplicaAvatar: View {
     let author: ResolvedAuthor
     var size: CGFloat = 44
@@ -200,11 +226,53 @@ private struct ReplicaAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(.circle)
+        .accessibilityHidden(true)
     }
 
     private var initials: String {
         let name = author.displayName.trimmingCharacters(in: .whitespaces)
         return name.isEmpty ? "?" : String(name.prefix(1)).uppercased()
+    }
+}
+
+/// The row of reply/repost/like/share glyphs every replica draws to look like its source. They
+/// are a picture of the original post's chrome, not working controls, so they are one silent
+/// element with an honest description rather than four unlabelled buttons.
+private struct ReplicaActionRow: View {
+    let symbols: [String]
+    let color: Color
+    var size: CGFloat = 16
+    /// `nil` spreads the glyphs across the full width, the way a post's action bar sits.
+    var spacing: CGFloat?
+    var axis: Axis = .horizontal
+
+    var body: some View {
+        Group {
+            if axis == .vertical {
+                VStack(spacing: spacing ?? 16) { glyphs }
+            } else if spacing == nil {
+                HStack {
+                    ForEach(Array(symbols.enumerated()), id: \.offset) { index, symbol in
+                        glyph(symbol)
+                        if index < symbols.count - 1 { Spacer() }
+                    }
+                }
+            } else {
+                HStack(spacing: spacing) { glyphs }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(L10n.value("replica.actions")))
+    }
+
+    private var glyphs: some View {
+        ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in glyph(symbol) }
+    }
+
+    private func glyph(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .replicaFont(size, relativeTo: .footnote)
+            .foregroundStyle(color)
     }
 }
 
@@ -230,33 +298,38 @@ struct XPostReplica: View {
                 ReplicaAvatar(author: manifest.author, size: 48)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
-                        Text(manifest.author.displayName).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text)
+                        Text(manifest.author.displayName).replicaFont(15, weight: .bold, relativeTo: .subheadline).foregroundStyle(Palette.text)
                         if manifest.author.isVerified {
-                            Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(Palette.blue)
+                            Image(systemName: "checkmark.seal.fill")
+                                .replicaFont(13, relativeTo: .caption)
+                                .foregroundStyle(Palette.blue)
+                                .accessibilityLabel(Text(L10n.value("replica.verified")))
                         }
                     }
-                    if let username = manifest.author.username {
-                        Text("@\(username)").font(.system(size: 15)).foregroundStyle(Palette.secondary)
+                    if let handle = manifest.author.displayHandle {
+                        Text(handle).replicaFont(15, relativeTo: .subheadline).foregroundStyle(Palette.secondary)
                     }
                 }
                 Spacer()
-                Text("𝕏").font(.system(size: 22, weight: .black)).foregroundStyle(Palette.text)
+                Text(verbatim: "𝕏")
+                    .replicaFont(22, weight: .black, relativeTo: .title3)
+                    .foregroundStyle(Palette.text)
                     .accessibilityHidden(true)
             }
             if !manifest.text.isEmpty {
                 Text(manifest.text)
-                    .font(.system(size: 17))
+                    .replicaFont(17)
                     .foregroundStyle(Palette.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let quote = manifest.quotedPost { quoteBlock(quote) }
             mediaBlock
-            Text(timestamp)
-                .font(.system(size: 14))
+            Text(manifest.timestampLabel())
+                .replicaFont(14, relativeTo: .footnote)
                 .foregroundStyle(Palette.secondary)
             Divider().overlay(Palette.border)
-            actionRow
+            ReplicaActionRow(symbols: ["bubble.left", "arrow.2.squarepath", "heart", "square.and.arrow.up"], color: Palette.secondary)
         }
         .padding(16)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -266,14 +339,20 @@ struct XPostReplica: View {
 
     @ViewBuilder private var mediaBlock: some View {
         if manifest.orderedMedia.count == 1, let media = manifest.orderedMedia.first {
-            ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 16, onPlay: onPlay)
-                .frame(maxHeight: 420)
+            ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 16, totalCount: 1, onPlay: onPlay)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.border, lineWidth: 1) }
         } else if !manifest.orderedMedia.isEmpty {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 3), GridItem(.flexible(), spacing: 3)], spacing: 3) {
                 ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                    ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 4, mode: .square, onPlay: onPlay)
+                    ReplicaMedia(
+                        archiveID: archiveID, record: media, cornerRadius: 4,
+                        mode: .square, totalCount: manifest.orderedMedia.count, onPlay: onPlay
+                    )
+                    // `.fit`, not `.fill`: filling asks the tile to cover its slot, which lets it
+                    // grow past the row and paint over the one beneath it.
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -283,35 +362,29 @@ struct XPostReplica: View {
 
     private func quoteBlock(_ quote: QuotedPost) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(quote.author.displayName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.text)
-            Text(quote.text).font(.system(size: 14)).foregroundStyle(Palette.text)
+            Text(quote.author.displayName).replicaFont(14, weight: .semibold, relativeTo: .footnote).foregroundStyle(Palette.text)
+            Text(quote.text).replicaFont(14, relativeTo: .footnote).foregroundStyle(Palette.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .overlay { RoundedRectangle(cornerRadius: 14).stroke(Palette.border, lineWidth: 1) }
-    }
-
-    private var actionRow: some View {
-        HStack {
-            ForEach(["bubble.left", "arrow.2.squarepath", "heart", "square.and.arrow.up"], id: \.self) { symbol in
-                Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(Palette.secondary)
-                if symbol != "square.and.arrow.up" { Spacer() }
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var timestamp: String {
-        (manifest.timestamp ?? manifest.savedAt).formatted(date: .abbreviated, time: .shortened)
+        .accessibilityElement(children: .combine)
     }
 }
 
 // MARK: - TikTok
 
 struct TikTokPostReplica: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let manifest: ArchiveManifest
     let archiveID: UUID
     let onPlay: (URL) -> Void
+
+    // The canvas grows with the text-size setting. A fixed 560pt frame clipped the caption and
+    // the account name outright at the accessibility sizes.
+    @ScaledMetric(relativeTo: .body) private var canvasHeight: CGFloat = 560
+
+    private var captionLines: Int { dynamicTypeSize.isAccessibilitySize ? 8 : 3 }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -319,51 +392,48 @@ struct TikTokPostReplica: View {
             if manifest.orderedMedia.count > 1 {
                 TabView {
                     ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                        ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
+                        ReplicaMedia(
+                            archiveID: archiveID, record: media, cornerRadius: 0,
+                            mode: .fill, totalCount: manifest.orderedMedia.count, onPlay: onPlay
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
             } else if let media = manifest.orderedMedia.first {
-                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
+                ReplicaMedia(
+                    archiveID: archiveID, record: media, cornerRadius: 0,
+                    mode: .fill, totalCount: 1, onPlay: onPlay
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("@\(manifest.author.username ?? manifest.author.displayName)")
-                        .font(.system(size: 16, weight: .bold))
+                    Text(manifest.author.displayHandle ?? manifest.author.displayName)
+                        .replicaFont(16, weight: .bold, relativeTo: .subheadline)
                     if !manifest.text.isEmpty {
-                        Text(manifest.text).font(.system(size: 14)).lineLimit(3)
+                        Text(manifest.text).replicaFont(14, relativeTo: .footnote).lineLimit(captionLines)
                     }
-                    Label("original sound", systemImage: "music.note")
-                        .font(.system(size: 13))
+                    Label(L10n.value("replica.originalSound"), systemImage: "music.note")
+                        .replicaFont(13, relativeTo: .caption)
                 }
                 .foregroundStyle(.white)
                 .shadow(radius: 3)
                 Spacer()
                 VStack(spacing: 20) {
                     ReplicaAvatar(author: manifest.author, size: 46).overlay(Circle().stroke(.white, lineWidth: 2))
-                    rail("heart.fill")
-                    rail("ellipsis.bubble.fill")
-                    rail("bookmark.fill")
-                    rail("arrowshape.turn.up.right.fill")
+                    ReplicaActionRow(
+                        symbols: ["heart.fill", "ellipsis.bubble.fill", "bookmark.fill", "arrowshape.turn.up.right.fill"],
+                        color: .white, size: 26, spacing: 20, axis: .vertical
+                    )
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(16)
         }
-        .frame(height: 560)
+        .frame(height: min(canvasHeight, 900))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .environment(\.colorScheme, .dark)
-    }
-
-    private func rail(_ symbol: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 26))
-            .foregroundStyle(.white)
-            .shadow(radius: 2)
-            .accessibilityHidden(true)
     }
 }
 
@@ -377,8 +447,11 @@ struct InstagramPostReplica: View {
     private enum Palette {
         static let card = Color.white
         static let text = Color(red: 0.09, green: 0.09, blue: 0.10)
-        static let secondary = Color(red: 0.55, green: 0.55, blue: 0.58)
+        // 4.55:1 on white. The lighter grey Instagram itself uses is 3.3:1, which is below the
+        // floor for the 11pt timestamp that is often a saved post's only provenance.
+        static let secondary = Color(red: 0.46, green: 0.46, blue: 0.49)
         static let border = Color(red: 0.90, green: 0.90, blue: 0.92)
+        static let verified = Color(red: 0.13, green: 0.52, blue: 0.96)
     }
 
     var body: some View {
@@ -386,57 +459,53 @@ struct InstagramPostReplica: View {
             HStack(spacing: 10) {
                 ReplicaAvatar(author: manifest.author, size: 36)
                 Text(manifest.author.username ?? manifest.author.displayName)
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.text)
+                    .replicaFont(14, weight: .semibold, relativeTo: .footnote).foregroundStyle(Palette.text)
                 if manifest.author.isVerified {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(Color(red: 0.13, green: 0.52, blue: 0.96))
+                    Image(systemName: "checkmark.seal.fill")
+                        .replicaFont(12, relativeTo: .caption2)
+                        .foregroundStyle(Palette.verified)
+                        .accessibilityLabel(Text(L10n.value("replica.verified")))
                 }
                 Spacer()
-                Image(systemName: "ellipsis").foregroundStyle(Palette.text)
+                Image(systemName: "ellipsis").foregroundStyle(Palette.text).accessibilityHidden(true)
             }
             .padding(12)
             if manifest.orderedMedia.count > 1 {
                 TabView {
                     ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                        ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, mode: .fill, onPlay: onPlay)
+                        ReplicaMedia(
+                            archiveID: archiveID, record: media, cornerRadius: 0,
+                            mode: .fill, totalCount: manifest.orderedMedia.count, onPlay: onPlay
+                        )
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .aspectRatio(1, contentMode: .fit)
             } else if let media = manifest.orderedMedia.first {
-                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, onPlay: onPlay)
-                    .frame(maxHeight: 460)
-                    .clipped()
+                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 0, totalCount: 1, onPlay: onPlay)
             }
-            HStack(spacing: 16) {
-                Image(systemName: "heart")
-                Image(systemName: "bubble.right")
-                Image(systemName: "paperplane")
-                Spacer()
-                Image(systemName: "bookmark")
-            }
-            .font(.system(size: 22))
-            .foregroundStyle(Palette.text)
+            ReplicaActionRow(
+                symbols: ["heart", "bubble.right", "paperplane", "bookmark"],
+                color: Palette.text, size: 22, spacing: 16
+            )
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             if !manifest.text.isEmpty {
-                (Text((manifest.author.username ?? manifest.author.displayName) + "  ").font(.system(size: 14, weight: .semibold))
-                    + Text(manifest.text).font(.system(size: 14)))
+                (Text((manifest.author.username ?? manifest.author.displayName) + "  ").fontWeight(.semibold)
+                    + Text(manifest.text))
+                    .replicaFont(14, relativeTo: .footnote)
                     .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
             }
-            Text(timestamp)
-                .font(.system(size: 11))
+            Text(manifest.timestampLabel(dateOnly: true).uppercased())
+                .replicaFont(11, relativeTo: .caption2)
                 .foregroundStyle(Palette.secondary)
                 .padding(12)
         }
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.border, lineWidth: 1) }
         .environment(\.colorScheme, .light)
-    }
-
-    private var timestamp: String {
-        (manifest.timestamp ?? manifest.savedAt).formatted(date: .abbreviated, time: .omitted).uppercased()
     }
 }
 
@@ -458,14 +527,14 @@ struct GenericPostReplica: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(manifest.author.displayName).font(.headline).foregroundStyle(StashyTheme.ink)
                     HStack(spacing: 5) {
-                        PlatformIcon(platform: manifest.platform, size: 16)
+                        PlatformIcon(platform: manifest.platform, size: 16, isDecorative: true)
                         Text(L10n.value(manifest.platform.titleKey))
                     }
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(accent)
+                    .foregroundStyle(StashyTheme.inkSecondary)
                 }
                 Spacer()
-                Text((manifest.timestamp ?? manifest.savedAt), style: .date)
+                Text(manifest.timestampLabel(dateOnly: true))
                     .font(.caption).foregroundStyle(StashyTheme.inkSecondary)
             }
             if !manifest.text.isEmpty {
@@ -473,9 +542,11 @@ struct GenericPostReplica: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 16, onPlay: onPlay)
-                    .frame(maxHeight: 440)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                ReplicaMedia(
+                    archiveID: archiveID, record: media, cornerRadius: 16,
+                    totalCount: manifest.orderedMedia.count, onPlay: onPlay
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
         .padding(16)
@@ -486,7 +557,9 @@ struct GenericPostReplica: View {
 
 // MARK: - Branded replicas for the remaining platforms
 
-/// The signature colours of one platform, so its saved post wears that platform's skin.
+/// The signature colours of one platform, so its saved post wears that platform's skin. Every
+/// `secondary` value here clears 4.5:1 against its own background — a replica that is faithful
+/// but unreadable has failed at the only job it has.
 struct BrandKit {
     let background: Color
     let text: Color
@@ -510,6 +583,10 @@ enum PlatformBrand {
             return BrandKit(background: Color(red: 0.05, green: 0.05, blue: 0.06), text: .white, secondary: Color(red: 0.62, green: 0.64, blue: 0.62), accent: Color(red: 0.33, green: 0.99, blue: 0.10), dark: true)
         case .imgur:
             return BrandKit(background: Color(red: 0.11, green: 0.11, blue: 0.12), text: .white, secondary: Color(red: 0.62, green: 0.63, blue: 0.64), accent: Color(red: 0.11, green: 0.72, blue: 0.43), dark: true)
+        case .reddit:
+            return BrandKit(background: Color(red: 0.05, green: 0.05, blue: 0.06), text: .white, secondary: Color(red: 0.65, green: 0.66, blue: 0.67), accent: Color(red: 1.00, green: 0.35, blue: 0.13), dark: true)
+        case .bluesky:
+            return BrandKit(background: .white, text: Color(red: 0.06, green: 0.09, blue: 0.13), secondary: Color(red: 0.42, green: 0.46, blue: 0.52), accent: Color(red: 0.00, green: 0.44, blue: 0.90), dark: false)
         default:
             return BrandKit(background: Color(red: 0.12, green: 0.12, blue: 0.14), text: .white, secondary: Color(red: 0.62, green: 0.62, blue: 0.64), accent: platform.sourceStyle.accent, dark: true)
         }
@@ -517,8 +594,8 @@ enum PlatformBrand {
 }
 
 /// A faithful-enough branded card for platforms without a bespoke replica: it wears the
-/// platform's colours and logo so a saved YouTube, Pinterest, Snapchat, Tumblr, Kick, or Imgur
-/// post still reads as itself rather than as a neutral archive row.
+/// platform's colours and logo so a saved YouTube, Pinterest, Snapchat, Tumblr, Kick, Imgur,
+/// Reddit, or Bluesky post still reads as itself rather than as a neutral archive row.
 struct BrandedPostReplica: View {
     let manifest: ArchiveManifest
     let archiveID: UUID
@@ -532,30 +609,35 @@ struct BrandedPostReplica: View {
                 ReplicaAvatar(author: manifest.author, size: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text(manifest.author.displayName).font(.system(size: 15, weight: .bold)).foregroundStyle(brand.text)
+                        Text(manifest.author.displayName).replicaFont(15, weight: .bold, relativeTo: .subheadline).foregroundStyle(brand.text)
                         if manifest.author.isVerified {
-                            Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(brand.accent)
+                            Image(systemName: "checkmark.seal.fill")
+                                .replicaFont(12, relativeTo: .caption2)
+                                .foregroundStyle(brand.accent)
+                                .accessibilityLabel(Text(L10n.value("replica.verified")))
                         }
                     }
-                    if let username = manifest.author.username {
-                        Text("@\(username)").font(.system(size: 14)).foregroundStyle(brand.secondary)
+                    if let handle = manifest.author.displayHandle {
+                        Text(handle).replicaFont(14, relativeTo: .footnote).foregroundStyle(brand.secondary)
                     }
                 }
                 Spacer()
                 PlatformIcon(platform: manifest.platform, size: 26)
             }
             if !manifest.text.isEmpty {
-                Text(manifest.text).font(.system(size: 16)).foregroundStyle(brand.text)
+                Text(manifest.text).replicaFont(16).foregroundStyle(brand.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 14, onPlay: onPlay)
-                    .frame(maxHeight: 460)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                ReplicaMedia(
+                    archiveID: archiveID, record: media, cornerRadius: 14,
+                    totalCount: manifest.orderedMedia.count, onPlay: onPlay
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            Text((manifest.timestamp ?? manifest.savedAt).formatted(date: .abbreviated, time: .shortened))
-                .font(.system(size: 13)).foregroundStyle(brand.secondary)
+            Text(manifest.timestampLabel())
+                .replicaFont(13, relativeTo: .caption).foregroundStyle(brand.secondary)
         }
         .padding(16)
         .background(brand.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

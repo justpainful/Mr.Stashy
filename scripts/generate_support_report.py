@@ -15,6 +15,8 @@ REQUIRED = (
     "tikTok",
     "instagram",
     "x",
+    "reddit",
+    "bluesky",
     "pinterest",
     "snapchat",
     "kick",

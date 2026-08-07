@@ -8,13 +8,15 @@ enum StashPackageError: LocalizedError {
     case duplicateArchive
     case checksumMismatch
 
+    // Every one of these reaches the person through the error alert, so they are translated
+    // like the rest of the interface rather than being the app's only English sentences.
     var errorDescription: String? {
         switch self {
-        case .invalidPackage: "The .stash package is invalid or corrupted."
-        case .unsafePath: "The .stash package contains an unsafe path."
-        case .unsupportedSchema: "This .stash package uses an unsupported schema."
-        case .duplicateArchive: "This post is already in the Stashy library."
-        case .checksumMismatch: "A media file in the .stash package failed checksum validation."
+        case .invalidPackage: L10n.value("stash.error.invalidPackage")
+        case .unsafePath: L10n.value("stash.error.unsafePath")
+        case .unsupportedSchema: L10n.value("stash.error.unsupportedSchema")
+        case .duplicateArchive: L10n.value("stash.error.duplicateArchive")
+        case .checksumMismatch: L10n.value("stash.error.checksumMismatch")
         }
     }
 }

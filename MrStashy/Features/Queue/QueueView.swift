@@ -89,12 +89,19 @@ private struct QueueRow: View {
                 PlatformIcon(platform: item.post.platform, size: 30)
                 Text(item.post.author.displayName).font(.headline).lineLimit(1)
                 Spacer()
-                Text(L10n.value(item.stage.titleKey))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(stageColor)
+                Label {
+                    Text(L10n.value(stageTitleKey))
+                } icon: {
+                    // Colour alone cannot carry the difference between finished, failed, and
+                    // working: a symbol says it for anyone who cannot separate the hues.
+                    Image(systemName: stageSymbol)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(stageTextColor)
+                .labelStyle(.titleAndIcon)
             }
             ProgressView(value: item.progress)
-                .tint(stageColor)
+                .tint(stageFillColor)
             if let message = item.stage.failureMessage {
                 // The reason is the useful part of a failure, so it gets its own line and a way
                 // to read all of it instead of being squeezed into the status caption.
@@ -110,22 +117,34 @@ private struct QueueRow: View {
                 .accessibilityIdentifier("queue.failureDetail")
             }
             HStack {
-                Text(L10n.format("queue.itemCount", Int64(item.selectedMediaIDs.count)))
+                // The count is what actually landed in the archive once the save has finished.
+                // Printing the number of items that were *requested* labelled a partial capture
+                // as a complete one, with nothing left on the row to say otherwise.
+                Text(L10n.format("queue.itemCount", Int64(savedOrRequestedCount)))
                 Spacer()
                 if let total = item.totalBytes {
-                    Text(ByteCountFormatter.string(fromByteCount: item.bytesDownloaded, countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: total, countStyle: .file))
+                    Text(L10n.format("queue.bytesProgress", L10n.byteCount(item.bytesDownloaded), L10n.byteCount(total)))
                 } else if item.bytesDownloaded > 0 {
-                    Text(ByteCountFormatter.string(fromByteCount: item.bytesDownloaded, countStyle: .file))
+                    Text(L10n.byteCount(item.bytesDownloaded))
                 }
             }
             .font(.caption).foregroundStyle(StashyTheme.inkSecondary)
+            if isPartial {
+                Label(
+                    L10n.format("queue.partial", Int64(savedOrRequestedCount), Int64(item.selectedMediaIDs.count)),
+                    systemImage: "exclamationmark.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(StashyTheme.butterText)
+                .accessibilityIdentifier("queue.partial")
+            }
             if item.bytesPerSecond > 0 || item.estimatedTimeRemaining != nil {
                 HStack(spacing: 12) {
                     if item.bytesPerSecond > 0 {
-                        Label(L10n.format("queue.speed", ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file)), systemImage: "speedometer")
+                        Label(L10n.format("queue.speed", L10n.byteCount(Int64(item.bytesPerSecond))), systemImage: "speedometer")
                     }
                     if let remaining = item.estimatedTimeRemaining {
-                        Label(L10n.format("queue.eta", Duration.seconds(remaining).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))), systemImage: "clock")
+                        Label(L10n.format("queue.eta", L10n.duration(remaining)), systemImage: "clock")
                     }
                 }
                 .font(.caption2)
@@ -137,7 +156,43 @@ private struct QueueRow: View {
         .accessibilityIdentifier("queue.row")
     }
 
-    private var stageColor: Color {
+    private var savedOrRequestedCount: Int {
+        item.savedMediaCount ?? item.selectedMediaIDs.count
+    }
+
+    /// A finished save that kept fewer items than were asked for. Comparing counts is what makes
+    /// this reliable: a resolver warning can ride along on a capture that saved everything.
+    private var isPartial: Bool {
+        guard case .completed = item.stage, let saved = item.savedMediaCount else { return false }
+        return saved < item.selectedMediaIDs.count
+    }
+
+    private var stageTitleKey: String {
+        isPartial ? "queue.stage.completedPartially" : item.stage.titleKey
+    }
+
+    private var stageSymbol: String {
+        if isPartial { return "exclamationmark.circle.fill" }
+        switch item.stage {
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "xmark.octagon.fill"
+        case .cancelled: return "slash.circle.fill"
+        default: return "arrow.down.circle"
+        }
+    }
+
+    /// Text and fills need different values of the same semantic colour: the palette's aqua and
+    /// indigo are readable as a bar but far below the contrast floor as a 12pt caption.
+    private var stageTextColor: Color {
+        if isPartial { return StashyTheme.butterText }
+        switch item.stage {
+        case .completed: return StashyTheme.greenText
+        case .failed, .cancelled: return StashyTheme.pink
+        default: return StashyTheme.aquaText
+        }
+    }
+
+    private var stageFillColor: Color {
         switch item.stage {
         case .completed: StashyTheme.green
         case .failed, .cancelled: StashyTheme.pink

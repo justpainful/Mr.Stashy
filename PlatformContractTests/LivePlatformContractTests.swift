@@ -31,6 +31,8 @@ struct LivePlatformContractTests {
         (.tikTok, "https://www.tiktok.com/@scout2015/video/6718335390845095173"),
         (.instagram, "https://www.instagram.com/p/CyXaQ8Ir4sh/"),
         (.x, "https://x.com/jack/status/20"),
+        (.reddit, "https://www.reddit.com/r/aww/comments/2ff9dr/tucked_in/"),
+        (.bluesky, "https://bsky.app/profile/bsky.app/post/3l6oveex3ii2l"),
         (.pinterest, "https://www.pinterest.com/pin/99290459813297/"),
         (.snapchat, "https://www.snapchat.com/spotlight"),
         (.kick, "https://kick.com/xqc"),

@@ -10,6 +10,8 @@ enum PlatformContractEvidence {
         .init(platform: .tikTok, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
         .init(platform: .instagram, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
         .init(platform: .x, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
+        .init(platform: .reddit, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
+        .init(platform: .bluesky, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
         .init(platform: .pinterest, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
         .init(platform: .snapchat, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),
         .init(platform: .kick, status: .notShipped, evidence: "No complete live contract result was produced for this revision."),

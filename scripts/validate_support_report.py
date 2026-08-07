@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-REQUIRED = ("tikTok", "instagram", "x", "pinterest", "snapchat", "kick", "threads", "tumblr", "imgur")
+REQUIRED = ("tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick", "threads", "tumblr", "imgur")
 ALL = REQUIRED + ("youTube", "directMedia")
 VALID = {"passing", "limited", "needsCredential", "failing", "blocked", "notShipped"}
 # A source that can be captured, even partially, satisfies a release gate. Only a source

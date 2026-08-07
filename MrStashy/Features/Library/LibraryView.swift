@@ -13,6 +13,7 @@ struct LibraryView: View {
     @State private var scope: LibraryScope = .all
     @State private var showCreateCollection = false
     @State private var collectionName = ""
+    @FocusState private var searchFocused: Bool
 
     private enum LibraryMode: String, CaseIterable, Identifiable { case posts, media; var id: String { rawValue } }
     private enum LibraryScope: Hashable { case all, pinned, collection(UUID) }
@@ -37,6 +38,16 @@ struct LibraryView: View {
             }
         }
         .navigationTitle(L10n.value("tab.library"))
+        .toolbar {
+            if searchFocused {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(L10n.value("action.done")) {
+                        searchFocused = false
+                    }
+                }
+            }
+        }
         // One task keyed on everything that changes the result. Three separate tasks raced each
         // other on appearance and could leave the list showing an older query's rows.
         .task(id: refreshKey) {
@@ -84,6 +95,9 @@ struct LibraryView: View {
 
     private var searchField: some View {
         TextField(L10n.value("library.search"), text: $query)
+            .focused($searchFocused)
+            .submitLabel(.search)
+            .onSubmit { searchFocused = false }
             .padding(.horizontal, 14).padding(.vertical, 11)
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(StashyTheme.hairline, lineWidth: 1))
             .padding(.horizontal, 20)
@@ -162,6 +176,7 @@ struct LibraryView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(.clear)
+            .scrollDismissesKeyboard(.interactively)
         } else {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 10)], spacing: 10) {
@@ -192,20 +207,64 @@ struct LibraryView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            StashyIllustration(name: "stashyLibrary", maxHeight: 220)
-            Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
-                .font(.title3.weight(.bold))
-            Text(L10n.value("library.empty.body"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+    /// Two different situations look identical if they share one screen: an archive that really
+    /// is empty, and a full archive whose rows a filter is hiding. Telling someone their library
+    /// is empty when it is not — with no way to see which filter did it — is the worse of the
+    /// two, so the filtered case gets its own message and a way out.
+    @ViewBuilder private var emptyState: some View {
+        if isFiltering, hasAnyUnfilteredContent {
+            VStack(spacing: 14) {
+                Label(L10n.value("library.noMatches.title"), systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.title3.weight(.bold))
+                Text(L10n.value("library.noMatches.body"))
+                    .font(.subheadline)
+                    .foregroundStyle(StashyTheme.inkSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button {
+                    query = ""
+                    selectedPlatform = nil
+                    selectedMediaType = nil
+                    scope = .all
+                } label: {
+                    Label(L10n.value("library.clearFilters"), systemImage: "xmark.circle")
+                }
+                .buttonStyle(.glassProminent)
+                .accessibilityIdentifier("library.clearFilters")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 14) {
+                StashyIllustration(name: "stashyLibrary", maxHeight: 220)
+                Label(L10n.value(mode == .posts ? "library.empty.posts" : "library.empty.media"), systemImage: mode == .posts ? "archivebox" : "photo.on.rectangle")
+                    .font(.title3.weight(.bold))
+                Text(L10n.value("library.empty.body"))
+                    .font(.subheadline)
+                    .foregroundStyle(StashyTheme.inkSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
         }
+    }
+
+    /// Whether the archive holds anything at all. It deliberately reads the app's own saved-post
+    /// list rather than `entries`, which the search query has already narrowed — asking a
+    /// filtered list whether the library is empty is precisely the mistake this branch exists to
+    /// correct. Every archived media file belongs to a saved post, so one list answers for both
+    /// modes.
+    private var hasAnyUnfilteredContent: Bool {
+        !appState.libraryPosts.isEmpty
+    }
+
+    private var isFiltering: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedPlatform != nil
+            || (mode == .media && selectedMediaType != nil)
+            || scope != .all
     }
 
     /// Everything that changes what the list should show, including the saved-post count so a
@@ -249,9 +308,14 @@ struct LibraryView: View {
         }
     }
 
+    /// The picker's options come from the whole archive, not from the rows a query has already
+    /// narrowed, and the current choice is always among them. Deriving them from the filtered
+    /// list let a search strand the picker on a platform that was no longer in its own menu: the
+    /// control showed nothing, the list showed nothing, and there was no way to tell why.
     private var availablePlatforms: [Platform] {
-        let values = mode == .posts ? entries.map(\.platform) : mediaEntries.map(\.platform)
-        return Array(Set(values)).sorted { L10n.value($0.titleKey) < L10n.value($1.titleKey) }
+        var values = Set(appState.libraryPosts.map(\.platform))
+        if let selectedPlatform { values.insert(selectedPlatform) }
+        return values.sorted { L10n.value($0.titleKey) < L10n.value($1.titleKey) }
     }
 
     private func delete(_ archive: ArchivedPostSummary) async {
@@ -328,55 +392,71 @@ private struct ScopeChip: View {
         }
         .buttonStyle(.plain)
         .glassEffect(isSelected ? .regular.tint(StashyTheme.aqua.opacity(0.32)).interactive() : .regular.interactive(), in: .capsule)
+        // A tint at 32% alpha is the only thing that separated the active filter from the rest,
+        // which is invisible with a colour-vision deficiency and silent to VoiceOver. The border
+        // is a shape cue that costs no layout, and the trait is what a screen reader reads.
+        .overlay { Capsule().strokeBorder(StashyTheme.aqua, lineWidth: isSelected ? 2 : 0) }
+        .frame(minHeight: 44)
+        .contentShape(Capsule())
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
 /// A saved-post row led by a real thumbnail of its first media, so the library reads as a
 /// shelf of what was kept rather than a list of names.
 private struct PostCard: View {
-    @Environment(\.layoutDirection) private var layoutDirection
     let summary: ArchivedPostSummary
     let store: ArchiveStore
     @State private var lead: LeadMedia?
 
-    private struct LeadMedia { let url: URL; let type: MediaType }
+    private struct LeadMedia { let url: URL; let type: MediaType; let duration: TimeInterval? }
 
     var body: some View {
         HStack(spacing: 12) {
             leadThumbnail
                 .frame(width: 76, height: 76)
-            VStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading, spacing: 4) {
+            // `.leading` is already direction-relative: SwiftUI resolves it to the right edge in
+            // Arabic on its own. Substituting `.trailing` for RTL by hand mirrored it a second
+            // time, which is what pushed these rows to the wrong side in Arabic.
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    PlatformIcon(platform: summary.platform, size: 18)
+                    PlatformIcon(platform: summary.platform, size: 18, isDecorative: true)
                     Text(summary.author).font(.headline).lineLimit(1)
                 }
                 Text(summary.text.isEmpty ? L10n.value("library.mediaOnly") : summary.text)
-                    .lineLimit(2).font(.subheadline).foregroundStyle(.secondary)
-                    .multilineTextAlignment(layoutDirection == .rightToLeft ? .trailing : .leading)
+                    .lineLimit(2).font(.subheadline).foregroundStyle(StashyTheme.inkSecondary)
+                    .multilineTextAlignment(.leading)
                 Text(L10n.format("library.mediaCount", Int64(summary.mediaCount)))
-                    .font(.caption).foregroundStyle(StashyTheme.green)
+                    .font(.caption).foregroundStyle(StashyTheme.greenText)
             }
-            .frame(maxWidth: .infinity, alignment: layoutDirection == .rightToLeft ? .trailing : .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(10)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(L10n.format(
+            "library.postCard.accessibility",
+            summary.author,
+            L10n.value(summary.platform.titleKey),
+            Int64(summary.mediaCount)
+        )))
         .task(id: summary.id) {
             guard let manifest = try? await store.loadManifest(id: summary.id),
                   let first = manifest.orderedMedia.min(by: { $0.orderIndex < $1.orderIndex }),
                   let filename = first.localFilename,
                   let url = await store.localMediaURL(archiveID: summary.id, filename: filename)
             else { return }
-            lead = LeadMedia(url: url, type: first.type)
+            lead = LeadMedia(url: url, type: first.type, duration: nil)
         }
     }
 
     @ViewBuilder private var leadThumbnail: some View {
         if let lead {
-            LocalMediaThumbnail(url: lead.url, type: lead.type, cornerRadius: 14)
+            LocalMediaThumbnail(url: lead.url, type: lead.type, cornerRadius: 14, duration: lead.duration)
         } else {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(StashyTheme.hairline)
-                .overlay { PlatformIcon(platform: summary.platform, size: 32) }
+                .overlay { PlatformIcon(platform: summary.platform, size: 32, isDecorative: true) }
         }
     }
 }
@@ -397,12 +477,22 @@ private struct LibraryMediaCell: View {
                     .overlay { ProgressView() }
             }
         }
+        // A grid cell must own both dimensions, and `.fit` is what guarantees that: `.fill`
+        // asks the cell to cover the proposal, which lets it grow past its row and paint over
+        // the one beneath it.
+        .frame(maxWidth: .infinity)
         .aspectRatio(1, contentMode: .fit)
         .overlay(alignment: .topLeading) {
-            PlatformIcon(platform: item.platform, size: 22).padding(6)
+            PlatformIcon(platform: item.platform, size: 22, isDecorative: true).padding(6)
         }
-        .accessibilityLabel(Text(L10n.format("media.selection.item", Int64(item.orderIndex + 1), item.type.shortLabel)))
-        .accessibilityValue(Text(item.author))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(L10n.format(
+            "library.mediaCell.accessibility",
+            item.type.shortLabel,
+            L10n.value(item.platform.titleKey),
+            item.author
+        )))
+        .accessibilityAddTraits(.isButton)
         .task(id: item.id) {
             guard let filename = item.localFilename else { return }
             url = await store.localMediaURL(archiveID: item.archiveID, filename: filename)
@@ -420,7 +510,9 @@ private struct LibraryMediaPeek: View {
     var body: some View {
         Group {
             if let url {
-                ArchivedMediaPreview(url: url, type: item.type)
+                // A context-menu peek is a picture, not a control: iOS renders it without
+                // touch handling, so a player here draws transport buttons that do nothing.
+                ArchivedMediaPreview(url: url, type: item.type, isInteractive: false)
                     .padding(10)
             } else {
                 ProgressView().frame(width: 320, height: 240)
@@ -445,19 +537,19 @@ private struct PostPeek: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let lead {
-                ArchivedMediaPreview(url: lead.url, type: lead.type)
+                ArchivedMediaPreview(url: lead.url, type: lead.type, isInteractive: false)
             } else {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(StashyTheme.hairline)
                     .frame(height: 200)
-                    .overlay { PlatformIcon(platform: summary.platform, size: 40) }
+                    .overlay { PlatformIcon(platform: summary.platform, size: 40, isDecorative: true) }
             }
             HStack(spacing: 8) {
-                PlatformIcon(platform: summary.platform, size: 20)
+                PlatformIcon(platform: summary.platform, size: 20, isDecorative: true)
                 Text(summary.author).font(.headline)
             }
             if !summary.text.isEmpty {
-                Text(summary.text).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+                Text(summary.text).font(.subheadline).foregroundStyle(StashyTheme.inkSecondary).lineLimit(4)
             }
         }
         .frame(width: 360)

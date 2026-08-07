@@ -22,6 +22,14 @@ extension MediaType {
     var shortLabel: String { L10n.value("media.\(rawValue)") }
 }
 
+/// How a thumbnail's decode ended. A failure has to be a state of its own: treating it as
+/// "still loading" is what left a spinner turning forever over a file that would never decode.
+private enum ThumbnailLoad {
+    case loading
+    case loaded(UIImage)
+    case failed
+}
+
 // MARK: - Remote thumbnail (a resolved post, before it is saved)
 
 /// Draws the preview a source already published for one piece of media. A photo is its own
@@ -61,15 +69,24 @@ struct RemoteMediaThumbnail: View {
         .overlay(alignment: .bottomTrailing) {
             if let badge = badgeText { ThumbnailBadge(text: badge) }
         }
+        .accessibilityElement()
+        .accessibilityLabel(Text(accessibilityLabel))
     }
 
     private var badgeText: String? {
         switch media.type {
         case .video: return media.duration.map(ThumbnailBadge.durationText)
-        case .gif: return "GIF"
+        case .gif: return L10n.value("media.gif")
         case .audio: return media.type.shortLabel
         case .photo: return nil
         }
+    }
+
+    /// The kind, and a video's length, so a duration that is only drawn as a badge is still
+    /// something VoiceOver reports.
+    private var accessibilityLabel: String {
+        guard let duration = media.duration, media.type == .video else { return media.type.shortLabel }
+        return "\(media.type.shortLabel), \(ThumbnailBadge.spokenDuration(duration))"
     }
 }
 
@@ -82,60 +99,91 @@ struct LocalMediaThumbnail: View {
     let url: URL
     let type: MediaType
     var cornerRadius: CGFloat = 18
-    @State private var image: UIImage?
+    /// A saved video's length, so the grid shows it the same way the review does.
+    var duration: TimeInterval?
+    @State private var load: ThumbnailLoad = .loading
 
     var body: some View {
         ThumbnailFrame(type: type, cornerRadius: cornerRadius) {
-            if let image {
+            switch load {
+            case .loaded(let image):
                 Image(uiImage: image).resizable().scaledToFill()
-            } else if type == .audio {
+            case .failed:
                 MediaGlyph(type: type)
-            } else {
-                ProgressView()
+            case .loading:
+                if type == .audio {
+                    MediaGlyph(type: type)
+                } else {
+                    ProgressView()
+                }
             }
         }
         .overlay { PlayOverlay(type: type) }
         .overlay(alignment: .bottomTrailing) {
-            if type == .gif { ThumbnailBadge(text: "GIF") }
+            if let badge = badgeText { ThumbnailBadge(text: badge) }
         }
+        .accessibilityElement()
+        .accessibilityLabel(Text(accessibilityLabel))
         // The decode runs inside a Task whose `.value` carries the result back, the same
         // offloading the archived-media preview already uses. It keeps a full-resolution decode
         // off the main thread while satisfying the compiler's isolation checks for UIImage.
         .task(id: url) {
+            load = .loading
             switch type {
             case .photo, .gif:
-                image = await Task.detached(priority: .userInitiated) {
+                let image = await Task.detached(priority: .userInitiated) {
                     MediaThumbnailRenderer.stillImage(url: url, maxPixelSize: 700)
                 }.value
+                load = image.map(ThumbnailLoad.loaded) ?? .failed
             case .video:
-                image = await Task.detached(priority: .userInitiated) {
+                let image = await Task.detached(priority: .userInitiated) {
                     await MediaThumbnailRenderer.videoFrame(url: url, maxPixelSize: 700)
                 }.value
+                load = image.map(ThumbnailLoad.loaded) ?? .failed
             case .audio:
-                break
+                load = .failed
             }
         }
+    }
+
+    private var badgeText: String? {
+        switch type {
+        case .video: return duration.map(ThumbnailBadge.durationText)
+        case .gif: return L10n.value("media.gif")
+        case .audio: return type.shortLabel
+        case .photo: return nil
+        }
+    }
+
+    private var accessibilityLabel: String {
+        guard let duration, type == .video else { return type.shortLabel }
+        return "\(type.shortLabel), \(ThumbnailBadge.spokenDuration(duration))"
     }
 }
 
 // MARK: - Building blocks
 
 /// The tinted, clipped container every thumbnail shares.
+///
+/// The gradient is the size authority and the media is an overlay on top of it. That ordering is
+/// the whole point: `scaledToFill` deliberately reports a size *larger* than the space it was
+/// offered, and a `ZStack` adopts the largest child, so the old arrangement let a portrait photo
+/// report a 76×135 thumbnail for a 76×76 slot — which is why images painted over the rows and
+/// text beneath them. An overlay never grows its parent, so the frame now wins and the clip that
+/// follows it does real work.
 private struct ThumbnailFrame<Content: View>: View {
     let type: MediaType
     let cornerRadius: CGFloat
     @ViewBuilder let content: Content
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [type.tint.opacity(0.28), type.tint.opacity(0.12)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            content
-        }
+        LinearGradient(
+            colors: [type.tint.opacity(0.28), type.tint.opacity(0.12)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay { content }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -178,16 +226,27 @@ struct ThumbnailBadge: View {
             .padding(.vertical, 3)
             .background(.black.opacity(0.55), in: Capsule())
             .padding(6)
+            // The badge duplicates what the thumbnail's own label already says.
+            .accessibilityHidden(true)
     }
 
     /// A compact m:ss (or h:mm:ss) for a duration badge.
     static func durationText(_ seconds: TimeInterval) -> String {
+        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
         if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, secs) }
         return String(format: "%d:%02d", minutes, secs)
+    }
+
+    /// The same length, said the way a screen reader should say it — "2 minutes, 14 seconds" —
+    /// rather than spelling out the digits of "2:14".
+    static func spokenDuration(_ seconds: TimeInterval) -> String {
+        guard seconds.isFinite, seconds >= 0 else { return durationText(0) }
+        return Duration.seconds(Int(seconds.rounded()))
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide).locale(L10n.activeLocale))
     }
 }
 
@@ -211,13 +270,21 @@ enum MediaThumbnailRenderer {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxPixelSize, height: maxPixelSize)
-        // A hair past the first frame; some containers have no keyframe exactly at zero.
+        // A hair past the first frame; some containers have no keyframe exactly at zero. The
+        // tolerances let the generator settle on the nearest one it can find rather than failing
+        // outright and leaving the tile with no picture at all.
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 1, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 2, preferredTimescale: 600)
         let time = CMTime(seconds: 0.1, preferredTimescale: 600)
         do {
             let result = try await generator.image(at: time)
             return UIImage(cgImage: result.image)
         } catch {
-            return nil
+            // A clip whose first second will not decode may still yield its very first frame.
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .positiveInfinity
+            guard let fallback = try? await generator.image(at: .zero) else { return nil }
+            return UIImage(cgImage: fallback.image)
         }
     }
 }

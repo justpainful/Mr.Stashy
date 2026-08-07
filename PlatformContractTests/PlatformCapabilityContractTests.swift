@@ -65,6 +65,8 @@ struct PlatformCapabilityContractTests {
         case .tikTok: "https://www.tiktok.com/@stashy/video/1234567890"
         case .instagram: "https://www.instagram.com/p/public-fixture/"
         case .x: "https://x.com/stashy/status/1234567890"
+        case .reddit: "https://www.reddit.com/r/stashy/comments/abc123/public_fixture/"
+        case .bluesky: "https://bsky.app/profile/stashy.bsky.social/post/abc123"
         case .pinterest: "https://www.pinterest.com/pin/1234567890/"
         case .snapchat: "https://www.snapchat.com/spotlight/public-fixture"
         case .kick: "https://kick.com/stashy?clip=clip_public"

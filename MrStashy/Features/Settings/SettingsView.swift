@@ -44,7 +44,7 @@ struct SettingsView: View {
                 }
                 Section(L10n.value("settings.library")) {
                     LabeledContent(L10n.value("settings.storageUsed")) {
-                        Text(ByteCountFormatter.string(fromByteCount: storageBytes, countStyle: .file))
+                        Text(L10n.byteCount(storageBytes))
                     }
                     Button { showStashImporter = true } label: {
                         Label(L10n.value("settings.importStash"), systemImage: "square.and.arrow.down")
@@ -146,7 +146,7 @@ private struct CapabilityRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                PlatformIcon(platform: capability.platform, size: 30)
+                PlatformIcon(platform: capability.platform, size: 30, isDecorative: true)
                 Text(L10n.value(capability.platform.titleKey)).font(.headline)
                 Spacer()
                 StatusPill(

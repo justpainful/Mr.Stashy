@@ -56,9 +56,11 @@ struct TikTokResolver: PlatformResolver {
             if let wall = AccessWallDetector.wall(in: page, requested: request.canonicalURL) { throw wall }
         }
 
-        // The playable address was not reachable. TikTok still publishes a cover image, and
-        // saving that is a legitimate outcome only if the app says plainly that is what it is.
-        warnings.append(L10n.value("resolver.warning.tikTokCoverOnly"))
+        // The playable address was not reachable through the page payload. TikTok still
+        // publishes a cover image, and saving that is a legitimate outcome only if the app says
+        // plainly that is what it is. The saying-so happens *after* the fallback, because the
+        // fallback scan can itself turn up a video — announcing cover-only up front labelled
+        // successful video captures as failures.
         let coverPage = try await engine.fetcher.firstUsablePage(
             at: request.canonicalURL,
             profiles: [.metadataCrawler, .browser]
@@ -73,16 +75,21 @@ struct TikTokResolver: PlatformResolver {
             if let wall = AccessWallDetector.wall(in: coverPage, requested: request.canonicalURL) { throw wall }
             throw ResolverError.platformChanged
         }
-        return try await engine.post(
+        var post = try await engine.post(
             from: candidates,
             request: request,
             page: coverPage,
             document: OpenGraphDocument(html: coverPage.html),
-            resolverVersion: "tiktok-cover.2",
+            resolverVersion: "tiktok-cover.3",
             author: metadata?.author(for: request.canonicalURL),
             text: metadata?.title ?? "",
             extraWarnings: warnings
         )
+        // Only what actually survived verification decides the wording.
+        if !post.media.contains(where: { $0.type == .video || $0.type == .audio }) {
+            post.warnings.append(L10n.value("resolver.warning.tikTokCoverOnly"))
+        }
+        return post
     }
 
     /// TikTok's documented public oEmbed endpoint. It needs no key and no account.
@@ -151,11 +158,18 @@ struct InstagramResolver: PlatformResolver {
 
     func resolve(_ request: ResolveRequest) async throws -> ResolvedPost {
         do {
-            return try await engine.resolvePage(
+            var post = try await engine.resolvePage(
                 request,
                 profiles: [.metadataCrawler, .browser],
-                resolverVersion: "instagram-public-page.2"
+                resolverVersion: "instagram-public-page.3"
             )
+            // Instagram publishes exactly one preview image for a whole post, whatever it holds.
+            // A ten-photo carousel and a Reel both arrive here as a single still, and reporting
+            // that as a finished capture is how someone ends up believing a JPEG is their video.
+            if post.media.count == 1, post.media.allSatisfy({ $0.type == .photo }) {
+                post.warnings.append(L10n.value("resolver.warning.previewOnly"))
+            }
+            return post
         } catch let error as ResolverError where error == .mediaMissing {
             // Instagram answers a signed-out request for a gated post with HTTP 200 and a login
             // page. Reporting "no media" for that would blame the post instead of the wall.
@@ -412,6 +426,8 @@ struct KickResolver: PlatformResolver {
         var warnings: [String] = []
         if clip.publishesAdaptiveStreamOnly {
             warnings.append(L10n.value("resolver.warning.adaptiveStream"))
+        } else if clip.publishesNoVideoAddress {
+            warnings.append(L10n.value("resolver.warning.kickNoVideo"))
         }
         return try await engine.post(
             from: candidates,
@@ -834,15 +850,24 @@ private struct KickClipResponse: Decodable {
             )
         }
 
+        var videoAddresses: [String] { [videoURL, clipURL].compactMap { $0 } }
+
         /// True when Kick published the clip only as an adaptive stream. Stashy archives files,
         /// so in that case the clip's own poster frame is what can honestly be saved.
+        ///
+        /// The guard matters: with no address at all, "contains" is vacuously false and this
+        /// used to claim Kick had published an adaptive stream that the response never mentioned.
         var publishesAdaptiveStreamOnly: Bool {
-            let progressive = [videoURL, clipURL].compactMap { $0 }.contains { source in
+            guard !videoAddresses.isEmpty else { return false }
+            return !videoAddresses.contains { source in
                 guard let url = URL(string: source) else { return false }
                 return !["m3u8", "mpd"].contains(url.pathExtension.lowercased())
             }
-            return !progressive
         }
+
+        /// The clip record listed no video address of any kind. That is a different fact from
+        /// "published as a stream", and saying which one is true is the whole point.
+        var publishesNoVideoAddress: Bool { videoAddresses.isEmpty }
 
         func mediaCandidates() -> [MediaCandidate] {
             var results: [MediaCandidate] = []

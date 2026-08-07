@@ -38,6 +38,22 @@ enum L10n {
         return translated == key ? Bundle.main.localizedString(forKey: key, value: nil, table: nil) : translated
     }
 
+    /// The translation for `key`, or `nil` when neither bundle has one. Used where a value may
+    /// be either a key Stashy authored or prose generated elsewhere, so the first is translated
+    /// and the second passes through instead of being replaced by its own identifier.
+    static func localizedIfPresent(_ key: String) -> String? {
+        let sentinel = "\u{0}stashy.missing"
+        lock.lock()
+        let bundle = overrideBundle
+        lock.unlock()
+        if let bundle {
+            let translated = bundle.localizedString(forKey: key, value: sentinel, table: nil)
+            if translated != sentinel { return translated }
+        }
+        let fallback = Bundle.main.localizedString(forKey: key, value: sentinel, table: nil)
+        return fallback == sentinel ? nil : fallback
+    }
+
     static func format(_ key: String, _ arguments: CVarArg...) -> String {
         String(format: value(key), locale: activeLocale, arguments: arguments)
     }
@@ -48,6 +64,37 @@ enum L10n {
         lock.unlock()
         guard let identifier else { return .autoupdatingCurrent }
         return Locale(identifier: identifier)
+    }
+
+    // MARK: - Formatted values
+    //
+    // `ByteCountFormatter` and the bare `Date.formatted()`/`Duration.formatted()` overloads all
+    // resolve against `Locale.current`, which is the *device's* language — so an Arabic interface
+    // on an English phone showed English sizes, dates, and durations. Every value that reaches the
+    // interface goes through one of these, so there is a single place to get it right.
+
+    static func byteCount(_ bytes: Int64) -> String {
+        isolated(bytes.formatted(.byteCount(style: .file).locale(activeLocale)))
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        guard seconds.isFinite, seconds >= 0 else { return isolated("0") }
+        return isolated(
+            Duration.seconds(Int(seconds.rounded()))
+                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated).locale(activeLocale))
+        )
+    }
+
+    static func date(_ value: Date, time: Date.FormatStyle.TimeStyle = .shortened) -> String {
+        isolated(value.formatted(Date.FormatStyle(date: .abbreviated, time: time).locale(activeLocale)))
+    }
+
+    /// Wraps a value in a Unicode first-strong isolate so it keeps its own direction inside a
+    /// sentence of the opposite one. Without it, "1.2 MB / 5 MB" inside an Arabic paragraph
+    /// visually reorders to "5 MB / 1.2 MB" — which tells a person the download is bigger than
+    /// the file it is downloading.
+    static func isolated(_ value: String) -> String {
+        "\u{2068}\(value)\u{2069}"
     }
 
     private static func localizationBundle(for identifier: String) -> Bundle? {

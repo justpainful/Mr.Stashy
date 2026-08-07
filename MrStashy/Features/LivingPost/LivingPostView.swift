@@ -10,9 +10,17 @@ struct LivingPostView: View {
     let archiveID: UUID
     @State private var manifest: ArchiveManifest?
     @State private var error: Error?
-    @State private var exportedStashURL: URL?
+    @State private var exportedStash: ExportedStash?
     @State private var actionMessage: String?
     @State private var player: PlayerItem?
+
+    /// A finished export, wrapped so the share sheet can be presented directly. The share item
+    /// used to live inside the menu, which had already closed by the time the export finished —
+    /// so a successful export looked like a button that did nothing.
+    private struct ExportedStash: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
 
     var body: some View {
         ZStack {
@@ -43,6 +51,9 @@ struct LivingPostView: View {
         }
         .fullScreenCover(item: $player) { item in
             FullScreenVideoPlayer(url: item.url)
+        }
+        .sheet(item: $exportedStash) { item in
+            ShareSheet(url: item.url)
         }
         .alert(
             L10n.value("livingPost.title"),
@@ -77,7 +88,7 @@ struct LivingPostView: View {
             TikTokPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
         case .instagram, .threads:
             InstagramPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
-        case .youTube, .pinterest, .snapchat, .tumblr, .kick, .imgur:
+        case .youTube, .pinterest, .snapchat, .tumblr, .kick, .imgur, .reddit, .bluesky:
             BrandedPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
         default:
             GenericPostReplica(manifest: manifest, archiveID: archiveID, onPlay: onPlay)
@@ -106,11 +117,6 @@ struct LivingPostView: View {
             } label: {
                 Label(L10n.value("livingPost.exportStash"), systemImage: "square.and.arrow.up")
             }
-            if let exportedStashURL {
-                ShareLink(item: exportedStashURL) {
-                    Label(L10n.value("livingPost.shareStash"), systemImage: "square.and.arrow.up.on.square")
-                }
-            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -132,9 +138,23 @@ struct LivingPostView: View {
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("Stashy-\(archiveID.uuidString).stash")
         do {
             try await appState.archiveStore.exportStash(id: archiveID, to: destination)
-            exportedStashURL = destination
+            // Present the share sheet straight away. Waiting for the person to reopen a menu
+            // they have no reason to reopen is not feedback.
+            exportedStash = ExportedStash(url: destination)
         } catch {
             actionMessage = error.localizedDescription
         }
     }
+}
+
+/// `UIActivityViewController`, so an exported package can be handed straight to Files, AirDrop,
+/// or Messages without a second tap through a menu.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

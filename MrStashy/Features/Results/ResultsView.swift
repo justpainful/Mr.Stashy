@@ -8,13 +8,22 @@ struct ResultsView: View {
     @State private var showTextCard = false
     @State private var pendingSaveMode: QueueItem.SaveMode?
 
-    /// Whether this post is already in the queue. Derived from the queue rather than held in
-    /// view state, so it survives navigating away and back — and so it clears again when a save
-    /// fails, instead of leaving both buttons permanently disabled.
-    private var queuedItem: QueueItem? {
+    /// A save still running. Derived from the queue rather than held in view state, so it
+    /// survives navigating away and back — and so it clears again when a save fails, instead of
+    /// leaving both buttons permanently disabled.
+    private var inFlightItem: QueueItem? {
         appState.queueItems.first { $0.post.id == post.id && !$0.stage.isFinished }
     }
-    private var queuedMode: QueueItem.SaveMode? { queuedItem?.mode }
+    private var queuedMode: QueueItem.SaveMode? { inFlightItem?.mode }
+
+    /// Whether this post is already in the archive. The library is the source of truth: a
+    /// finished queue row is transient — "Clear finished" deletes it, and it is not restored on
+    /// relaunch — so keying the confirmation off the queue alone made the bar flip back to
+    /// "Save" at the exact moment the save succeeded, which reads as "nothing happened".
+    private var isArchived: Bool {
+        appState.libraryPosts.contains { $0.id == post.id }
+            || appState.queueItems.contains { $0.post.id == post.id && $0.stage == .completed }
+    }
 
     init(post: ResolvedPost) {
         self.post = post
@@ -72,13 +81,13 @@ struct ResultsView: View {
 
     /// Saving happens in the queue, so the screen has to say the save started; otherwise the
     /// only feedback is a tab badge the person may never look at.
-    private func savedConfirmation(_ mode: QueueItem.SaveMode) -> some View {
+    private func savedConfirmation(_ title: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label {
-                Text(L10n.value(mode == .fullPost ? "results.queued.fullPost" : "results.queued.mediaOnly"))
+                Text(title)
                     .font(.subheadline.weight(.semibold))
             } icon: {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(StashyTheme.green)
+                Image(systemName: symbol).foregroundStyle(StashyTheme.greenText)
             }
             HStack(spacing: 12) {
                 Button {
@@ -122,9 +131,9 @@ struct ResultsView: View {
             .clipShape(.circle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.author.displayName).font(.headline)
-                if let username = post.author.username { Text("@\(username)").font(.subheadline).foregroundStyle(StashyTheme.inkSecondary) }
+                if let handle = post.author.displayHandle { Text(handle).font(.subheadline).foregroundStyle(StashyTheme.inkSecondary) }
                 HStack(spacing: 5) {
-                    PlatformIcon(platform: post.platform, size: 17)
+                    PlatformIcon(platform: post.platform, size: 17, isDecorative: true)
                     Text(L10n.value(post.platform.titleKey))
                 }
                 .font(.caption.weight(.medium))
@@ -184,7 +193,15 @@ struct ResultsView: View {
     @ViewBuilder private var bottomBar: some View {
         Group {
             if let queuedMode {
-                savedConfirmation(queuedMode)
+                savedConfirmation(
+                    L10n.value(queuedMode == .fullPost ? "results.queued.fullPost" : "results.queued.mediaOnly"),
+                    symbol: "arrow.down.circle.fill"
+                )
+            } else if isArchived {
+                // The save finished. Saying so is the whole point: the bar used to revert to the
+                // Save buttons at that instant, so the clearest signal the screen gave was that
+                // nothing had been kept — and tapping Save again re-downloaded the whole post.
+                savedConfirmation(L10n.value("results.saved"), symbol: "checkmark.circle.fill")
             } else {
                 HStack(spacing: 12) { saveButtons }
             }
@@ -213,7 +230,7 @@ struct ResultsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         }
-        .disabled(queuedMode != nil || (selectedMediaIDs.isEmpty && !post.media.isEmpty))
+        .disabled(queuedMode != nil || isArchived || (selectedMediaIDs.isEmpty && !post.media.isEmpty))
         .accessibilityIdentifier("results.saveFull")
     }
 
@@ -223,12 +240,12 @@ struct ResultsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         }
-        .disabled(queuedMode != nil || selectedMediaIDs.isEmpty)
+        .disabled(queuedMode != nil || isArchived || selectedMediaIDs.isEmpty)
         .accessibilityIdentifier("results.saveMedia")
     }
 
     private func requestSave(_ mode: QueueItem.SaveMode) {
-        guard queuedMode == nil else { return }
+        guard queuedMode == nil, !isArchived else { return }
         if appState.settings.quality == .askEveryTime {
             pendingSaveMode = mode
         } else {
@@ -316,17 +333,28 @@ private struct MediaSelectionCard: View {
 
 /// Builds the one-line technical summary shown under a single-item preview.
 enum MediaCardMetadata {
+    /// Only facts that belong to the item in hand. A still photograph has no codec and no
+    /// running time, and printing a video's ones next to it — "Photo · 1920 × 1080 · H264 ·
+    /// 12 sec" — described a file that does not exist.
     static func summary(for media: ResolvedMedia) -> String {
         var values: [String] = [media.type.shortLabel]
-        if let width = media.width, let height = media.height {
-            values.append("\(width) × \(height)")
+        if let width = media.width, let height = media.height, width > 0, height > 0 {
+            values.append(L10n.isolated("\(width) × \(height)"))
         }
-        if let duration = media.duration {
-            values.append(ThumbnailBadge.durationText(duration))
+        if let duration = media.duration, duration > 0, media.type == .video || media.type == .audio {
+            values.append(L10n.isolated(ThumbnailBadge.durationText(duration)))
         }
         if let variant = media.highestVariant {
-            if let codec = variant.codec, !codec.isEmpty { values.append(codec.uppercased()) }
-            if let bytes = variant.estimatedBytes { values.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
+            if media.type == .video || media.type == .audio,
+               let codec = variant.codec, !codec.isEmpty {
+                values.append(L10n.isolated(codec.uppercased()))
+            }
+            if let container = variant.container, !container.isEmpty {
+                values.append(L10n.isolated(container.uppercased()))
+            }
+            if let bytes = variant.estimatedBytes, bytes > 0 {
+                values.append(L10n.byteCount(bytes))
+            }
         }
         return values.joined(separator: " · ")
     }

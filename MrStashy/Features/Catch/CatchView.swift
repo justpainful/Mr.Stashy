@@ -2,13 +2,17 @@ import SwiftUI
 
 struct CatchView: View {
     @Environment(AppState.self) private var appState
-    @State private var urlText = ""
     @State private var showCapabilities = false
     @State private var selectedSource: Platform?
     @State private var reviewPost: ResolvedPost?
-    /// The post most recently opened for review, so returning from it does not immediately
-    /// re-open the same review.
-    @State private var lastReviewedID: UUID?
+
+    /// The address being inspected, and the post already reviewed, both live on `AppState`.
+    /// Switching the interface language rebuilds this view from scratch; holding them here meant
+    /// a half-typed link was discarded and the already-reviewed marker reset, which pushed the
+    /// review screen back on top of a Catch screen the person had just returned to.
+    private var urlText: Binding<String> {
+        Binding(get: { appState.catchURLText }, set: { appState.catchURLText = $0 })
+    }
 
     var body: some View {
         ZStack {
@@ -30,18 +34,17 @@ struct CatchView: View {
             ResultsView(post: post)
         }
         .onChange(of: readyPost, initial: true) { _, post in
-            guard let post, post.id != lastReviewedID else { return }
-            lastReviewedID = post.id
+            guard let post, post.id != appState.reviewedPostID else { return }
+            appState.reviewedPostID = post.id
             reviewPost = post
         }
-        // A link shared from another app can arrive while this screen is already visible, so it
-        // is consumed whenever the shared list changes, not only when the view first appears.
-        // The busy flag is part of the key so the next link is taken when the current one
-        // settles: consuming them all at once resolved five links concurrently and showed one.
-        .task(id: sharedLinkKey) { await consumeSharedLink() }
+        // Draining shared links is the app's job, not this view's. Keying a `.task` on the
+        // pending-link count and the busy flag made the resolve cancel itself the moment it
+        // started, so every shared link failed while a typed one worked.
+        .onAppear { appState.drainPendingLinks() }
         .sheet(isPresented: $showCapabilities) { PlatformDiagnosticsSheet() }
         .sheet(item: $selectedSource) { platform in
-            PlatformPasteSheet(platform: platform, urlText: $urlText)
+            PlatformPasteSheet(platform: platform, urlText: urlText)
         }
     }
 
@@ -50,23 +53,11 @@ struct CatchView: View {
         return nil
     }
 
-    private var sharedLinkKey: String {
-        "\(appState.pendingLinks.count)-\(isResolving)"
-    }
-
-    /// Takes one shared link at a time. Every link stays in the queue until it is its turn, so
-    /// a five-link share is inspected one after another instead of four being silently lost.
-    private func consumeSharedLink() async {
-        guard !isResolving, let link = appState.takeNextPendingLink() else { return }
-        urlText = link.absoluteString
-        await appState.resolve(link.absoluteString)
-    }
-
     private var captureForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.value("catch.pastePrompt"))
                 .font(.headline)
-            TextField(L10n.value("catch.urlPlaceholder"), text: $urlText, axis: .vertical)
+            TextField(L10n.value("catch.urlPlaceholder"), text: urlText, axis: .vertical)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 .autocorrectionDisabled()
@@ -82,7 +73,7 @@ struct CatchView: View {
                 // never shown an unexplained paste-permission alert just for opening a screen.
                 PasteButton(payloadType: URL.self) { urls in
                     guard let first = urls.first else { return }
-                    Task { @MainActor in urlText = first.absoluteString }
+                    Task { @MainActor in appState.catchURLText = first.absoluteString }
                 }
                 .labelStyle(.iconOnly)
                 .accessibilityLabel(Text(L10n.value("catch.paste")))
@@ -90,7 +81,7 @@ struct CatchView: View {
                     Label(L10n.value("catch.resolve"), systemImage: "sparkle.magnifyingglass")
                 }
                 .buttonStyle(.glassProminent)
-                .disabled(urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isResolving)
+                .disabled(appState.catchURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isResolving)
                 .accessibilityIdentifier("catch.resolve")
                 Spacer(minLength: 0)
             }
@@ -105,7 +96,7 @@ struct CatchView: View {
     }
 
     private func inspect() {
-        let link = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = appState.catchURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !link.isEmpty else { return }
         Task { await appState.resolve(link) }
     }
@@ -153,14 +144,14 @@ struct CatchView: View {
             .buttonStyle(.glass)
         case .resolving(let stage):
             HStack(spacing: 12) {
-                ProgressView().tint(StashyTheme.green)
+                ProgressView().tint(StashyTheme.greenText)
                 Text(L10n.value(stage.titleKey)).font(.subheadline.weight(.semibold))
             }
             .accessibilityIdentifier("catch.resolving")
         case .ready(let post):
             VStack(alignment: .leading, spacing: 10) {
                 Button {
-                    lastReviewedID = post.id
+                    appState.reviewedPostID = post.id
                     reviewPost = post
                 } label: {
                     ResultReadyRow(post: post)
@@ -172,6 +163,15 @@ struct CatchView: View {
                 ForEach(Array(post.warnings.enumerated()), id: \.offset) { _, warning in
                     ResolverWarningRow(text: warning)
                 }
+                Button {
+                    appState.clearCatchResult()
+                    appState.catchURLText = ""
+                    appState.reviewedPostID = nil
+                } label: {
+                    Label(L10n.value("catch.startOver"), systemImage: "xmark.circle")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("catch.startOver")
             }
         case .failed(let error):
             VStack(alignment: .leading, spacing: 12) {
@@ -192,7 +192,7 @@ struct CatchView: View {
                     .buttonStyle(.glassProminent)
                     Button {
                         appState.clearCatchResult()
-                        urlText = ""
+                        appState.catchURLText = ""
                     } label: {
                         Label(L10n.value("catch.startOver"), systemImage: "xmark.circle")
                     }
@@ -260,7 +260,7 @@ private struct PlatformPasteSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(spacing: 14) {
-                        PlatformIcon(platform: platform, size: 54)
+                        PlatformIcon(platform: platform, size: 54, isDecorative: true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(L10n.value(platform.titleKey)).font(.title3.weight(.bold))
                             Text(L10n.format("catch.sourcePaste.body", L10n.value(platform.titleKey)))
@@ -339,20 +339,23 @@ private struct ResultReadyRow: View {
                 Image(systemName: "chevron.forward").foregroundStyle(StashyTheme.inkSecondary)
             }
             if !preview.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(Array(preview.enumerated()), id: \.element.id) { index, media in
-                        RemoteMediaThumbnail(media: media)
-                            .frame(height: 104)
-                            .frame(maxWidth: .infinity)
-                            .overlay {
-                                if index == preview.count - 1, sortedMedia.count > preview.count {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.black.opacity(0.48))
-                                        Text("+\(sortedMedia.count - preview.count)")
-                                            .font(.title3.weight(.bold)).foregroundStyle(.white)
+                // Keep the catch preview compact and deterministic. Flexible widths made the
+                // last item grow to half the card while portrait/landscape media were loading.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(preview.enumerated()), id: \.element.id) { index, media in
+                            RemoteMediaThumbnail(media: media)
+                                .frame(width: 88, height: 88)
+                                .overlay {
+                                    if index == preview.count - 1, sortedMedia.count > preview.count {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.black.opacity(0.48))
+                                            Text(L10n.format("media.more", Int64(sortedMedia.count - preview.count)))
+                                                .font(.title3.weight(.bold)).foregroundStyle(.white)
+                                        }
                                     }
                                 }
-                            }
+                        }
                     }
                 }
             }
@@ -361,7 +364,7 @@ private struct ResultReadyRow: View {
             }
             Label(L10n.value("catch.ready.reviewSave"), systemImage: "square.and.arrow.down")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(StashyTheme.green)
+                .foregroundStyle(StashyTheme.greenText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

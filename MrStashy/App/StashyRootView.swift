@@ -17,7 +17,7 @@ struct StashyRootView: View {
         .environment(\.locale, appState.settings.language.locale)
         // Arabic has to lay out right-to-left even when the device itself is left-to-right.
         // Without this, choosing Arabic translated the words and left the layout mirrored wrong.
-        .environment(\.layoutDirection, appState.settings.language.layoutDirection ?? systemLayoutDirection)
+        .environment(\.layoutDirection, appState.settings.language.layoutDirection ?? UserSettings.AppLanguage.systemLayoutDirection)
         .transaction { transaction in
             if systemReduceMotion || appState.settings.reduceMotion { transaction.animation = nil }
         }
@@ -41,11 +41,6 @@ struct StashyRootView: View {
         } message: {
             Text(appState.lastNotice?.message ?? "")
         }
-    }
-
-    private var systemLayoutDirection: LayoutDirection {
-        let code = Locale.autoupdatingCurrent.language.languageCode?.identifier ?? "en"
-        return Locale.Language(identifier: code).characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     }
 
     private var appShell: some View {
@@ -82,6 +77,14 @@ extension UserSettings.AppLanguage {
         case .english: .leftToRight
         case .arabic: .rightToLeft
         }
+    }
+
+    /// The direction the device itself reads in. Shared, because anything rendered outside the
+    /// view hierarchy — the exported text card — has to reach the same answer the root does, and
+    /// a hardcoded left-to-right fallback there produced a preview and an export that disagreed.
+    static var systemLayoutDirection: LayoutDirection {
+        let code = Locale.autoupdatingCurrent.language.languageCode?.identifier ?? "en"
+        return Locale.Language(identifier: code).characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     }
 }
 

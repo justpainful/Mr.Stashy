@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # A branch has to be verifiable before it becomes a pull request. Without this, the only way
+  # to compile and screenshot a change was to open one first.
+  workflow_dispatch:
 
 permissions:
   contents: read

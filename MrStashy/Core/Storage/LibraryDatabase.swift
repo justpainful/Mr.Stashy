@@ -162,7 +162,7 @@ actor LibraryDatabase {
     }
 
     private var errorMessage: String {
-        guard let connection, let message = sqlite3_errmsg(connection) else { return "Unknown SQLite error" }
+        guard let connection, let message = sqlite3_errmsg(connection) else { return L10n.value("library.database.unknownError") }
         return String(cString: message)
     }
 }
@@ -173,8 +173,8 @@ enum LibraryDatabaseError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .openFailed(let message): "Could not open Stashy library database: \(message)"
-        case .statementFailed(let message): "Could not update Stashy library database: \(message)"
+        case .openFailed(let message): L10n.format("library.database.openFailed", message)
+        case .statementFailed(let message): L10n.format("library.database.statementFailed", message)
         }
     }
 }

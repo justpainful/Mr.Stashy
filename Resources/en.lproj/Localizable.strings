@@ -194,6 +194,8 @@
 "platform.tumblr" = "Tumblr";
 "platform.imgur" = "Imgur";
 "platform.youTube" = "YouTube";
+"platform.reddit" = "Reddit";
+"platform.bluesky" = "Bluesky";
 "platform.discord" = "Discord";
 "platform.directMedia" = "Direct media";
 
@@ -286,3 +288,67 @@
 "resolver.recovery.networkFailure" = "Check your connection and try again.";
 "resolver.recovery.invalidResponse" = "The source answered unexpectedly. Try again in a moment.";
 "resolver.recovery.verificationFailure" = "The file that arrived was not the media it claimed to be, so it was discarded. Try again.";
+
+/* Media playback */
+"media.playback.failed" = "This file could not be played";
+"media.playback.play" = "Play";
+"media.playback.pause" = "Pause";
+"media.playback.hint" = "Plays in place. Use Full screen for the full player.";
+"media.playback.fullScreen" = "Full screen";
+"media.playback.close" = "Close player";
+"media.playback.position" = "Playback position";
+"media.playback.back15" = "Back 15 seconds";
+"media.playback.forward15" = "Forward 15 seconds";
+"media.playback.mute" = "Mute";
+"media.playback.unmute" = "Unmute";
+"media.more" = "%lld more";
+"media.gifTruncated" = "This animation is longer than Stashy previews; the first part is shown.";
+"media.item.accessibility" = "%1$@, item %2$lld of %3$lld";
+"replica.originalSound" = "original sound";
+"replica.handle" = "@%@";
+"replica.actions" = "Reply, repost, like, and share, as they appeared on the source";
+"resolver.warning.redditSilentVideo" = "Reddit stores this video's picture and sound as separate files and publishes only the picture, so the saved video has no sound.";
+
+/* Library filtering and accessibility */
+"library.noMatches.title" = "No matches";
+"library.noMatches.body" = "Your archive is not empty — the current search, source, or collection is hiding everything in it.";
+"library.clearFilters" = "Clear filters";
+"library.postCard.accessibility" = "%1$@ on %2$@, %3$lld saved item(s)";
+"library.mediaCell.accessibility" = "%1$@ from %2$@, saved from a post by %3$@";
+
+/* Queue */
+"queue.bytesProgress" = "%1$@ of %2$@";
+"queue.partial" = "Kept %1$lld of %2$lld item(s); the rest were no longer being served.";
+"queue.stage.completedPartially" = "Partly saved";
+"replica.verified" = "Verified account";
+"results.saved" = "Saved to your library.";
+"livingPost.savedOn" = "Archived %@ (the source published no date)";
+"livingPost.exportedStash" = "Package ready to share.";
+
+/* Platform support explanations */
+"support.evidence.directMedia" = "A direct media address is confirmed to serve media before it is offered, then checksummed on the way into the archive.";
+"support.evidence.x" = "Reads the public post payload that X publishes for embedded posts, keeping every photo and the highest-bitrate video the post exposes, in order.";
+"support.evidence.reddit" = "Reads the post's own public JSON, which Reddit serves to anyone. A gallery keeps every image in the author's order. A Reddit-hosted video is saved as the file Reddit publishes, and the capture states plainly that Reddit stores its sound as a separate file it does not publish.";
+"support.evidence.bluesky" = "Reads Bluesky's public API: the account identifier, then the post. Every attached picture is saved at full size. Video is published only as an adaptive playlist, so the poster frame is saved and labelled as such.";
+"support.evidence.imgur" = "Resolves the public asset address for the post identifier and confirms the host serves it before saving.";
+"support.evidence.tikTok" = "Saves the playable file when the public page publishes one. When it does not, the cover image is saved and the capture is labelled as cover-only rather than presented as the video.";
+"support.evidence.pinterest" = "Reads the pin's own public widget payload for the original-size image or video rendition. Private and secret boards are not readable.";
+"support.evidence.kick" = "Reads Kick's public clip endpoint. Saves the playable clip file when Kick publishes one. Many clips are published only as an adaptive stream, which is not a file; those are saved as the clip's poster frame, and the capture says so.";
+"support.evidence.tumblr" = "Saves the media a public post publishes in its preview metadata. Posts behind a blog's content screen are not readable, and a post whose only published media is its preview image is labelled as such.";
+"support.evidence.snapchat" = "Public Spotlight and Story links expose a preview image. Snapchat publishes no downloadable video address for a signed-out reader, so a Spotlight capture is the preview image and is labelled as one.";
+"support.evidence.youTube" = "Saves the title, channel, and cover image that YouTube publishes through its own oEmbed endpoint. YouTube publishes no file address, so the video stream is not part of the capture.";
+"support.evidence.instagram" = "A public post that still publishes preview metadata is saved. Instagram publishes one preview image per post, so a carousel is captured as its cover and said to be one. Most signed-out requests are answered with a login page, and those posts cannot be captured without an account, which Stashy never uses.";
+"support.evidence.threads" = "Threads redirects signed-out readers to a login page, so only posts that still publish preview metadata can be saved, and those are labelled as preview-only captures.";
+"support.evidence.discord" = "Discord support is bot-only and permission-scoped, and no bot token is configured. Stashy never automates a personal Discord account.";
+"support.evidence.unverified" = "No live check completed for this build, so this description is what the adapter is written to do rather than what was last observed.";
+"resolver.warning.previewOnly" = "This source published only its preview image for a signed-out reader, so that image was saved rather than the post's own media.";
+"resolver.warning.kickNoVideo" = "Kick's clip record listed no video address, so the clip's poster frame was saved.";
+/* Storage errors */
+"stash.error.invalidPackage" = "The .stash package is invalid or corrupted.";
+"stash.error.unsafePath" = "The .stash package contains an unsafe path.";
+"stash.error.unsupportedSchema" = "This .stash package uses an unsupported schema.";
+"stash.error.duplicateArchive" = "This post is already in your Stashy library.";
+"stash.error.checksumMismatch" = "A media file in the .stash package failed checksum validation.";
+"library.database.unknownError" = "Unknown database error";
+"library.database.openFailed" = "Could not open the Stashy library index: %@";
+"library.database.statementFailed" = "Could not update the Stashy library index: %@";

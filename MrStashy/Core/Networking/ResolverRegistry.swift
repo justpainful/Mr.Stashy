@@ -86,6 +86,8 @@ struct ResolverRegistry: Sendable {
             TikTokResolver(client: client, prober: mediaProber),
             InstagramResolver(client: client, prober: mediaProber),
             XResolver(client: client, prober: mediaProber),
+            RedditResolver(client: client, prober: mediaProber),
+            BlueskyResolver(client: client, prober: mediaProber),
             PinterestResolver(client: client, prober: mediaProber),
             KickResolver(client: client, prober: mediaProber),
             YouTubeResolver(client: client, prober: mediaProber),
@@ -351,10 +353,26 @@ struct PublicOpenGraphResolver: PlatformResolver {
 
     func resolve(_ request: ResolveRequest) async throws -> ResolvedPost {
         do {
-            return try await engine.resolvePage(request, resolverVersion: "public-page.2")
+            // The resolver version names the source, so an archive can say which adapter wrote
+            // it rather than recording the same anonymous string for three different platforms.
+            var post = try await engine.resolvePage(request, resolverVersion: "\(platform.rawValue)-public-page.3")
+            // These sources publish a share card for a signed-out reader, not the post's media.
+            // A single still where the post held a video is a preview, and the capture has to
+            // say so — the honest sentence existed only in the support screen, which is not
+            // where the person is standing when they decide to save.
+            if Self.isPreviewOnly(post) {
+                post.warnings.append(L10n.value("resolver.warning.previewOnly"))
+            }
+            return post
         } catch let error as ResolverError where error == .mediaMissing {
             throw emptyResultError
         }
+    }
+
+    /// A capture that kept exactly one still image is, for these sources, the page's preview
+    /// card. A video, an animation, or several items means the page published the post itself.
+    private static func isPreviewOnly(_ post: ResolvedPost) -> Bool {
+        post.media.count == 1 && post.media.allSatisfy { $0.type == .photo }
     }
 }
 

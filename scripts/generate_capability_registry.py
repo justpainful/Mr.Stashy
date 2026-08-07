@@ -11,6 +11,8 @@ PLATFORM_CASES = {
     "tikTok": "tikTok",
     "instagram": "instagram",
     "x": "x",
+    "reddit": "reddit",
+    "bluesky": "bluesky",
     "pinterest": "pinterest",
     "snapchat": "snapchat",
     "kick": "kick",
@@ -20,7 +22,7 @@ PLATFORM_CASES = {
     "youTube": "youTube",
     "directMedia": "directMedia",
 }
-ORDER = ("directMedia", "tikTok", "instagram", "x", "pinterest", "snapchat", "kick", "threads", "tumblr", "imgur", "youTube")
+ORDER = ("directMedia", "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick", "threads", "tumblr", "imgur", "youTube")
 
 
 def swift_string(value: str) -> str:

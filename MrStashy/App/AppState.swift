@@ -22,12 +22,21 @@ final class AppState {
             }
         }
     }
+    /// The address in the Catch field. It lives here rather than in the view because switching
+    /// the interface language rebuilds the whole tree, and a half-typed link is not something to
+    /// throw away over a settings change.
+    var catchURLText = ""
+    /// The post whose review has already been opened, so returning from it does not immediately
+    /// re-open the same one. Held here for the same reason as the field text.
+    var reviewedPostID: UUID?
     var lastError: UserVisibleError?
     /// A save can finish with something worth saying that is not a failure, such as an item the
     /// source stopped serving. Those belong in front of the person, not only in the log.
     var lastNotice: UserVisibleError?
 
     private var activeSaveTasks: [UUID: Task<Void, Never>] = [:]
+    /// The one task draining shared links, owned by the app so no view update can cancel it.
+    private var linkDrainTask: Task<Void, Never>?
     private var transferSamples: [UUID: QueueTransferSample] = [:]
     /// Identifies the newest resolve request so a slower earlier one cannot overwrite it.
     private var resolveGeneration = 0
@@ -92,6 +101,25 @@ final class AppState {
         return pendingLinks.removeFirst()
     }
 
+    /// Resolves shared links one at a time, here rather than in the view.
+    ///
+    /// It used to run from `.task(id:)` on the Catch screen, keyed on the pending-link count and
+    /// the busy flag. Taking a link and starting to resolve it changes both — so SwiftUI saw a
+    /// new identity, cancelled the very task doing the work, and the cancelled `URLSession` call
+    /// surfaced as "could not reach the source". Every link shared into Stashy failed that way,
+    /// while the same address typed by hand worked. A task the app owns cannot be cancelled by a
+    /// view update.
+    func drainPendingLinks() {
+        guard linkDrainTask == nil else { return }
+        linkDrainTask = Task { [weak self] in
+            while let link = self?.takeNextPendingLink() {
+                self?.catchURLText = link.absoluteString
+                await self?.resolve(link.absoluteString)
+            }
+            self?.linkDrainTask = nil
+        }
+    }
+
     func createCollection(named name: String) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
@@ -142,6 +170,7 @@ final class AppState {
         for link in links where !pendingLinks.contains(link) { pendingLinks.append(link) }
         guard !links.isEmpty else { return }
         selectedTab = .catch
+        drainPendingLinks()
     }
 
 #if DEBUG
@@ -158,45 +187,95 @@ final class AppState {
         try? await archiveStore.deleteAllArchives()
         libraryPosts = []
         let isArabic = arguments.contains("--ui-arabic") || Locale.preferredLanguages.first?.hasPrefix("ar") == true
-        let fixture = Self.screenshotPost(isArabic: isArabic)
-        if let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6mKQAAAAASUVORK5CYII=") {
-            _ = try? await archiveStore.saveTextCard(pngData: data, sourcePost: fixture)
-            libraryPosts = await archiveStore.loadSummaries()
-        }
+
+        // The fixture writes real files. Pointing it at `example.invalid` meant every thumbnail,
+        // replica, and player in the captures drew a placeholder glyph, so the screenshots could
+        // never show the media interface they exist to review.
+        let files = await Self.screenshotMediaFiles()
+        let fixture = Self.screenshotPost(isArabic: isArabic, files: files)
+        try? await archiveStore.saveLocalFixture(
+            post: fixture,
+            files: files.map { (type: $0.type, data: $0.data, filename: $0.filename) }
+        )
+        libraryPosts = await archiveStore.loadSummaries()
         if arguments.contains("--ui-results-fixture") { catchState = .ready(fixture) }
     }
 
-    private static func screenshotPost(isArabic: Bool) -> ResolvedPost {
-        ResolvedPost(
-        id: UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!,
-        // An X post so the screenshots exercise the platform-faithful replica, not the generic
-        // fallback. The living-post capture then shows the x.com-style card.
-        platform: .x,
-        originalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
-        canonicalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
-        author: ResolvedAuthor(platformID: nil, displayName: isArabic ? "أرشيف تجريبي" : "Sample archive", username: isArabic ? "تجربة" : "sample", avatarURL: nil, profileURL: nil, badges: []),
-        text: isArabic ? "منشور تجريبي يحفظ صورة وفيديو وصورة متحركة بالترتيب الأصلي." : "A local screenshot fixture with a photo, video, and GIF in original order.",
-        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-        fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
-        quotedPost: nil,
-        media: [
-            screenshotMedia(order: 0, type: .photo, url: "https://example.invalid/one.png"),
-            screenshotMedia(order: 1, type: .video, url: "https://example.invalid/two.mp4"),
-            screenshotMedia(order: 2, type: .gif, url: "https://example.invalid/three.gif")
-        ],
-        resolverVersion: "screenshot-fixture.v1",
-        warnings: []
+    /// One generated file per media kind, written to a scratch directory so the Catch review can
+    /// point its variants at real `file://` addresses.
+    private struct ScreenshotFile {
+        let type: MediaType
+        let filename: String
+        let data: Data
+        let url: URL
+        let width: Int
+        let height: Int
+        let duration: TimeInterval?
+    }
+
+    private static func screenshotMediaFiles() async -> [ScreenshotFile] {
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("StashyFixture", isDirectory: true)
+        try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        var files: [ScreenshotFile] = []
+
+        if let photo = SyntheticMedia.photoPNG(width: 1_080, height: 1_350, seed: 0) {
+            let url = scratch.appendingPathComponent("0-photo.png")
+            try? photo.write(to: url, options: .atomic)
+            files.append(ScreenshotFile(type: .photo, filename: "0-photo.png", data: photo, url: url, width: 1_080, height: 1_350, duration: nil))
+        }
+        let videoURL = scratch.appendingPathComponent("1-video.mp4")
+        if await SyntheticMedia.videoMP4(to: videoURL, width: 1_280, height: 720, seconds: 6),
+           let data = try? Data(contentsOf: videoURL) {
+            files.append(ScreenshotFile(type: .video, filename: "1-video.mp4", data: data, url: videoURL, width: 1_280, height: 720, duration: 6))
+        }
+        if let gif = SyntheticMedia.animatedGIF() {
+            let url = scratch.appendingPathComponent("2-loop.gif")
+            try? gif.write(to: url, options: .atomic)
+            files.append(ScreenshotFile(type: .gif, filename: "2-loop.gif", data: gif, url: url, width: 480, height: 480, duration: 1))
+        }
+        return files
+    }
+
+    private static func screenshotPost(isArabic: Bool, files: [ScreenshotFile]) -> ResolvedPost {
+        let poster = files.first { $0.type == .photo }?.url
+        return ResolvedPost(
+            id: UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!,
+            // An X post so the screenshots exercise the platform-faithful replica, not the
+            // generic fallback. The living-post capture then shows the x.com-style card.
+            platform: .x,
+            originalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
+            canonicalURL: URL(string: "https://x.com/sample/status/1700000000000000000")!,
+            author: ResolvedAuthor(platformID: nil, displayName: isArabic ? "أرشيف تجريبي" : "Sample archive", username: isArabic ? "تجربة" : "sample", avatarURL: nil, profileURL: nil, badges: []),
+            text: isArabic ? "منشور تجريبي يحفظ صورة وفيديو وصورة متحركة بالترتيب الأصلي." : "A local screenshot fixture with a photo, video, and GIF in original order.",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            quotedPost: nil,
+            media: files.enumerated().map { index, file in
+                screenshotMedia(order: index, file: file, poster: file.type == .video ? poster : nil)
+            },
+            resolverVersion: "screenshot-fixture.v2",
+            warnings: []
         )
     }
 
-    private static func screenshotMedia(order: Int, type: MediaType, url: String) -> ResolvedMedia {
+    private static func screenshotMedia(order: Int, file: ScreenshotFile, poster: URL?) -> ResolvedMedia {
         let variant = MediaVariant(
-            id: UUID(), url: URL(string: url)!, headers: [:], expirationDate: nil,
-            width: 1920, height: 1080, bitrate: 4_000_000, fps: 30, isHDR: false,
-            codec: "h264", container: URL(string: url)!.pathExtension, hasSeparateAudio: false,
-            estimatedBytes: 1_024_000, qualityLabel: "Original source", cleanliness: .original
+            id: UUID(), url: file.url, headers: [:], expirationDate: nil,
+            width: file.width, height: file.height,
+            bitrate: file.type == .video ? 4_000_000 : nil,
+            fps: file.type == .video ? 24 : nil,
+            isHDR: false,
+            // A codec only belongs on media that has one. Reporting "H264" for a PNG was a
+            // fixture inheriting a video's fields, and it read as a real bug in the review card.
+            codec: file.type == .video ? "h264" : nil,
+            container: file.url.pathExtension, hasSeparateAudio: false,
+            estimatedBytes: Int64(file.data.count), qualityLabel: "Original source", cleanliness: .original
         )
-        return ResolvedMedia(id: UUID(), orderIndex: order, type: type, thumbnailURL: nil, variants: [variant], width: 1920, height: 1080, duration: type == .photo ? nil : 12, altText: nil)
+        return ResolvedMedia(
+            id: UUID(), orderIndex: order, type: file.type, thumbnailURL: poster,
+            variants: [variant], width: file.width, height: file.height,
+            duration: file.duration, altText: nil
+        )
     }
 #endif
 
@@ -297,6 +376,14 @@ final class AppState {
         item.totalBytes = estimatedTotalBytes(post: post, selectedIDs: selectedIDs)
         queueItems.insert(item, at: 0)
         startSave(item)
+        // A result that has been sent to the queue is finished business. Leaving it on the Catch
+        // screen kept a green "Review & save" card in front of the paste field for the rest of
+        // the session, inviting a second save of something already archived.
+        if case .ready(let ready) = catchState, ready.id == post.id {
+            catchState = .idle
+            catchURLText = ""
+            reviewedPostID = nil
+        }
     }
 
     private func startSave(_ item: QueueItem) {
@@ -334,7 +421,7 @@ final class AppState {
     private func performSave(item: QueueItem, mediaOnly: Bool) async {
         do {
             updateQueueItem(id: item.id, stage: item.selectedMediaIDs.isEmpty ? .creatingArchive : .downloading)
-            let warnings = try await archiveStore.save(
+            let outcome = try await archiveStore.save(
                 post: item.post,
                 selectedMediaIDs: item.selectedMediaIDs,
                 mediaOnly: mediaOnly,
@@ -356,10 +443,15 @@ final class AppState {
                     lastNotice = UserVisibleError(message: error.localizedDescription)
                 }
             }
+            // The row keeps the number of items that actually landed. The notice alert is
+            // dismissed and forgotten; the row is what someone comes back to.
+            if let index = queueItems.firstIndex(where: { $0.id == item.id }) {
+                queueItems[index].savedMediaCount = outcome.savedCount
+            }
             updateQueueItem(id: item.id, stage: .completed, progress: 1)
             libraryPosts = await archiveStore.loadSummaries()
-            if !warnings.isEmpty {
-                lastNotice = UserVisibleError(message: warnings.joined(separator: "\n"))
+            if !outcome.warnings.isEmpty {
+                lastNotice = UserVisibleError(message: outcome.warnings.joined(separator: "\n"))
             }
         } catch is CancellationError {
             updateQueueItem(id: item.id, stage: .cancelled)

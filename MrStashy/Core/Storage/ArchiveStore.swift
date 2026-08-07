@@ -47,8 +47,17 @@ actor ArchiveStore {
 
     func loadMediaSummaries(matching query: String? = nil) -> [ArchivedMediaSummary] {
         let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-        let entries = fileSummaries().flatMap { summary -> [ArchivedMediaSummary] in
+        let entries = fileSummaries().flatMap { summary -> [(media: ArchivedMediaSummary, postMatches: Bool)] in
             guard let manifest = try? loadManifest(id: summary.id) else { return [] }
+            // A media row is reachable by the words of the post it came from. Only the author,
+            // platform, and file kind were searchable here, so a phrase that found a post in
+            // Posts mode found nothing in Media mode and the archive looked empty. The post's
+            // own text is only in scope here, inside the flatMap, so the test lives here too.
+            let postMatches = !trimmed.isEmpty && (
+                summary.author.lowercased().contains(trimmed)
+                    || summary.platform.rawValue.lowercased().contains(trimmed)
+                    || summary.text.lowercased().contains(trimmed)
+            )
             return manifest.orderedMedia.map { record in
                 let fileSize: Int64? = record.localFilename.flatMap { filename in
                     guard let mediaURL = localMediaURL(archiveID: summary.id, filename: filename) else { return nil }
@@ -58,7 +67,7 @@ actor ArchiveStore {
                         return nil
                     }
                 }
-                return ArchivedMediaSummary(
+                let media = ArchivedMediaSummary(
                     archiveID: summary.id,
                     mediaID: record.mediaID,
                     orderIndex: record.orderIndex,
@@ -70,14 +79,16 @@ actor ArchiveStore {
                     fileSize: fileSize,
                     isHDR: record.variant?.isHDR
                 )
+                return (media: media, postMatches: postMatches)
             }
         }
-        guard !trimmed.isEmpty else { return entries.sorted { $0.savedAt > $1.savedAt } }
-        return entries.filter {
-            $0.author.lowercased().contains(trimmed) ||
-            $0.platform.rawValue.lowercased().contains(trimmed) ||
-            $0.type.rawValue.lowercased().contains(trimmed)
-        }.sorted { $0.savedAt > $1.savedAt }
+        guard !trimmed.isEmpty else {
+            return entries.map(\.media).sorted { $0.savedAt > $1.savedAt }
+        }
+        return entries
+            .filter { $0.postMatches || $0.media.type.rawValue.lowercased().contains(trimmed) }
+            .map(\.media)
+            .sorted { $0.savedAt > $1.savedAt }
     }
 
     private func fileSummaries() -> [ArchivedPostSummary] {
@@ -104,7 +115,7 @@ actor ArchiveStore {
         allowCellular: Bool = true,
         quality: UserSettings.Quality = .original,
         onProgress: @escaping @Sendable (ArchiveSaveProgress) async -> Void = { _ in }
-    ) async throws -> [String] {
+    ) async throws -> ArchiveSaveOutcome {
         try Task.checkCancellation()
         // A readable reason, not a "verification failure": the same post is already saving, and
         // letting both run would have them move two staging folders onto one destination.
@@ -156,7 +167,7 @@ actor ArchiveStore {
                 try fileManager.moveItem(at: staging, to: destination)
                 deduplicateFile(at: destination, checksum: outcome.checksum)
                 let archivedVariant = variant.safeArchiveCopy
-                records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: outcome.checksum, variant: archivedVariant))
+                records.append(ArchivedMediaRecord(mediaID: item.id, orderIndex: item.orderIndex, type: item.type, originalURL: archivedVariant.url, localFilename: destinationName, checksumSHA256: outcome.checksum, variant: archivedVariant, altText: item.altText, durationSeconds: item.duration))
                 let completedBytes = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
                 completedBefore += completedBytes
                 await onProgress(.init(
@@ -190,7 +201,9 @@ actor ArchiveStore {
         // The on-disk manifest is the source of truth. If the recoverable search index is
         // temporarily unavailable, keep a completed archive rather than misreporting failure.
         try? await database.upsert(summary)
-        return warnings
+        // The caller needs both numbers. A row that reports how many items were asked for is how
+        // a capture that lost two of five ended up labelled as a complete save.
+        return ArchiveSaveOutcome(savedCount: records.count, requestedCount: selectedMedia.count, warnings: warnings)
     }
 
     func deleteArchive(id: UUID) async throws {
@@ -280,6 +293,75 @@ actor ArchiveStore {
         try? await database.upsert(summary)
         return summary
     }
+
+#if DEBUG
+    /// Writes an archive from media that already exists on disk, for the screenshot run only.
+    ///
+    /// The visual review needs a saved post whose files are real, so the library grid, the
+    /// platform replicas, and the video player show what a person actually sees rather than a
+    /// placeholder glyph. It goes through the same manifest, checksum, and integrity checks as a
+    /// real save; only the transfer is skipped, because the bytes are already here.
+    @discardableResult
+    func saveLocalFixture(
+        post: ResolvedPost,
+        files: [(type: MediaType, data: Data, filename: String)]
+    ) async throws -> ArchivedPostSummary {
+        try fileManager.createDirectory(at: postsRoot, withIntermediateDirectories: true)
+        let archiveID = post.id
+        let temporary = root.appendingPathComponent(".tmp-fixture-\(UUID().uuidString)", isDirectory: true)
+        let mediaDirectory = temporary.appendingPathComponent("media", isDirectory: true)
+        try fileManager.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: temporary) }
+
+        var records: [ArchivedMediaRecord] = []
+        for (index, file) in files.enumerated() {
+            let mediaURL = mediaDirectory.appendingPathComponent(file.filename)
+            try file.data.write(to: mediaURL, options: .atomic)
+            try MediaIntegrityVerifier.validate(file: mediaURL, type: file.type)
+            let source = post.media.first { $0.orderIndex == index }
+            records.append(ArchivedMediaRecord(
+                mediaID: source?.id ?? UUID(),
+                orderIndex: index,
+                type: file.type,
+                originalURL: source?.highestVariant?.url ?? post.canonicalURL,
+                localFilename: file.filename,
+                checksumSHA256: try SHA256.fileDigest(mediaURL),
+                variant: source?.highestVariant
+            ))
+        }
+
+        let manifest = ArchiveManifest(
+            archiveID: archiveID,
+            platform: post.platform,
+            canonicalURL: post.canonicalURL,
+            sourceURL: post.originalURL,
+            author: post.author,
+            text: post.text,
+            timestamp: post.createdAt,
+            quotedPost: post.quotedPost,
+            orderedMedia: records,
+            resolverVersion: post.resolverVersion,
+            savedAt: .now
+        )
+        let summary = ArchivedPostSummary(
+            id: archiveID,
+            platform: post.platform,
+            author: post.author.displayName,
+            text: post.text,
+            mediaCount: records.count,
+            savedAt: manifest.savedAt,
+            localFolderName: archiveID.uuidString
+        )
+        try JSONEncoder.stashy.encode(manifest).write(to: temporary.appendingPathComponent("manifest.json"), options: .atomic)
+        try JSONEncoder.stashy.encode(summary).write(to: temporary.appendingPathComponent("summary.json"), options: .atomic)
+        let finalDirectory = postsRoot.appendingPathComponent(archiveID.uuidString, isDirectory: true)
+        try? fileManager.removeItem(at: finalDirectory)
+        try fileManager.moveItem(at: temporary, to: finalDirectory)
+        checksumIndex = nil
+        try? await database.upsert(summary)
+        return summary
+    }
+#endif
 
     func exportStash(id: UUID, to destination: URL) throws {
         let directory = postsRoot.appendingPathComponent(id.uuidString, isDirectory: true)
