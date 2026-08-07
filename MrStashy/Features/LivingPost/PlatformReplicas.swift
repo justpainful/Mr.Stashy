@@ -131,7 +131,12 @@ struct ReplicaMedia: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let localURL {
+        if let localURL, record.type == .audio {
+            // Audio has nothing to show. In a grid or a full-bleed canvas it drew a mute tile
+            // with a waveform glyph and no way to hear it; the player belongs here whatever
+            // shape the surrounding replica wants.
+            AudioPlaybackView(url: localURL, title: record.altText)
+        } else if let localURL {
             switch mode {
             case .natural:
                 naturalContent(localURL)
@@ -337,26 +342,63 @@ struct XPostReplica: View {
         .environment(\.colorScheme, .dark)
     }
 
+    /// x.com's own arrangements: one item fills the card, two sit side by side, three put the
+    /// first tall on one side with the other two stacked beside it, and four make a 2×2. A plain
+    /// two-column grid left a three-image post with an empty black quarter, which is the one
+    /// shape x.com never draws.
     @ViewBuilder private var mediaBlock: some View {
-        if manifest.orderedMedia.count == 1, let media = manifest.orderedMedia.first {
-            ReplicaMedia(archiveID: archiveID, record: media, cornerRadius: 16, totalCount: 1, onPlay: onPlay)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.border, lineWidth: 1) }
-        } else if !manifest.orderedMedia.isEmpty {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 3), GridItem(.flexible(), spacing: 3)], spacing: 3) {
-                ForEach(manifest.orderedMedia, id: \.mediaID) { media in
-                    ReplicaMedia(
-                        archiveID: archiveID, record: media, cornerRadius: 4,
-                        mode: .square, totalCount: manifest.orderedMedia.count, onPlay: onPlay
-                    )
-                    // `.fit`, not `.fill`: filling asks the tile to cover its slot, which lets it
-                    // grow past the row and paint over the one beneath it.
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(1, contentMode: .fit)
+        let media = manifest.orderedMedia
+        Group {
+            switch media.count {
+            case 0:
+                EmptyView()
+            case 1:
+                tile(media[0], corner: 16)
+            case 2:
+                HStack(spacing: 3) {
+                    tile(media[0], square: true)
+                    tile(media[1], square: true)
+                }
+            case 3:
+                HStack(spacing: 3) {
+                    tile(media[0], square: true)
+                    VStack(spacing: 3) {
+                        tile(media[1], square: true)
+                        tile(media[2], square: true)
+                    }
+                }
+            default:
+                VStack(spacing: 3) {
+                    HStack(spacing: 3) {
+                        tile(media[0], square: true)
+                        tile(media[1], square: true)
+                    }
+                    HStack(spacing: 3) {
+                        tile(media[2], square: true)
+                        tile(media[3], square: true)
+                    }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.border, lineWidth: 1) }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            if !media.isEmpty {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.border, lineWidth: 1)
+            }
+        }
+    }
+
+    @ViewBuilder private func tile(_ media: ArchivedMediaRecord, corner: CGFloat = 0, square: Bool = false) -> some View {
+        let item = ReplicaMedia(
+            archiveID: archiveID, record: media, cornerRadius: corner,
+            mode: square ? .square : .natural, totalCount: manifest.orderedMedia.count, onPlay: onPlay
+        )
+        if square {
+            // `.fit`, not `.fill`: filling asks the tile to cover its slot, which lets it grow
+            // past the row and paint over the one beneath it.
+            item.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
+        } else {
+            item
         }
     }
 

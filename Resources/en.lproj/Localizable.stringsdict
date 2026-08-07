@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Counts that vary at runtime. Without these, English read "1 item(s)" and Arabic used one
+     accusative form for every number, which is only correct for 11-99. -->
+<plist version="1.0">
+<dict>
+    <key>catch.ready.count</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>Found %#@items@.</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld item</string>
+                <key>other</key>
+                <string>%lld items</string>
+        </dict>
+    </dict>
+    <key>queue.itemCount</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@items@</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld item</string>
+                <key>other</key>
+                <string>%lld items</string>
+        </dict>
+    </dict>
+    <key>library.mediaCount</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@items@</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld item</string>
+                <key>other</key>
+                <string>%lld items</string>
+        </dict>
+    </dict>
+    <key>media.more</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@items@</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld more</string>
+                <key>other</key>
+                <string>%lld more</string>
+        </dict>
+    </dict>
+    <key>resolver.warning.partialMedia</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>Saved %1$lld of %2$#@items@. The rest were no longer being served.</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld item</string>
+                <key>other</key>
+                <string>%lld items</string>
+        </dict>
+    </dict>
+    <key>queue.partial</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>Kept %1$lld of %2$#@items@; the rest were no longer being served.</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+                <key>one</key>
+                <string>%lld item</string>
+                <key>other</key>
+                <string>%lld items</string>
+        </dict>
+    </dict>
+</dict>
+</plist>

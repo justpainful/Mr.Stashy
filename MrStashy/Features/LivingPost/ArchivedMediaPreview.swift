@@ -214,7 +214,7 @@ enum AnimatedGIF {
             kCGImageSourceThumbnailMaxPixelSize: 1_024
         ]
         var frames: [UIImage] = []
-        var duration: TimeInterval = 0
+        var delays: [TimeInterval] = []
         for index in 0 ..< min(count, maximumFrames) {
             if Task.isCancelled { return nil }
             guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, frameOptions as CFDictionary) else { continue }
@@ -222,9 +222,27 @@ enum AnimatedGIF {
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any]
             let gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
             let delay = (gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? (gif?[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
-            duration += max(delay, 0.02)
+            delays.append(max(delay, 0.02))
         }
-        guard let animated = UIImage.animatedImage(with: frames, duration: duration) else { return nil }
+        guard !frames.isEmpty else { return nil }
+
+        // `UIImage.animatedImage(with:duration:)` gives every frame the same screen time, so a
+        // GIF that holds one frame for a second and flicks through the rest — which is most of
+        // them — played at a flat average and lost its timing entirely. Repeating each frame in
+        // proportion to its own delay reproduces the real cadence with the only control the API
+        // offers. The tick is bounded so a pathological file cannot expand into a huge array.
+        let tick = max(delays.min() ?? 0.05, 0.02)
+        var timed: [UIImage] = []
+        timed.reserveCapacity(frames.count)
+        for (frame, delay) in zip(frames, delays) {
+            let repeats = min(max(Int((delay / tick).rounded()), 1), 40)
+            for _ in 0 ..< repeats {
+                timed.append(frame)
+                if timed.count >= 1_200 { break }
+            }
+            if timed.count >= 1_200 { break }
+        }
+        guard let animated = UIImage.animatedImage(with: timed, duration: tick * Double(timed.count)) else { return nil }
         return Result(image: animated, isTruncated: count > maximumFrames)
     }
 }

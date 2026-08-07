@@ -37,6 +37,9 @@ final class ScreenshotFlows: XCTestCase {
         openTab("Queue", in: app)
         capture(app, named: "queue.png")
         openTab("Library", in: app)
+        // The fixture writes real media during launch. Photographing the library before that
+        // finishes captures an empty archive and calls it the empty state.
+        awaitLibraryContent(in: app)
         capture(app, named: "library-posts.png")
         let createCollection = app.buttons["New collection"]
         XCTAssertTrue(createCollection.waitForExistence(timeout: 5))
@@ -72,13 +75,22 @@ final class ScreenshotFlows: XCTestCase {
         app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "--ui-arabic", "-AppleLanguages", "(ar)", "-AppleLocale", "ar_SA"])
         capture(app, named: "ar-catch.png")
         openTab("المكتبة", in: app)
+        awaitLibraryContent(in: app)
         capture(app, named: "ar-library.png")
 
         app.terminate()
         app = launch(arguments: ["-onboarding.complete", "YES", "--ui-testing", "--ui-dark"])
         capture(app, named: "dark-catch.png")
         openTab("Library", in: app)
+        awaitLibraryContent(in: app)
         capture(app, named: "dark-library.png")
+    }
+
+    /// Blocks until the saved-post row exists. Every language and appearance run builds its own
+    /// fixture at launch, so each of them has to wait for its own.
+    private func awaitLibraryContent(in app: XCUIApplication) {
+        let row = app.buttons.matching(identifier: "library.postRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "The screenshot fixture never reached the library")
     }
 
     private func launch(arguments: [String]) -> XCUIApplication {

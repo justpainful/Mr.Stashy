@@ -192,14 +192,20 @@ final class AppState {
         // replica, and player in the captures drew a placeholder glyph, so the screenshots could
         // never show the media interface they exist to review.
         let files = await Self.screenshotMediaFiles()
-        let fixture = Self.screenshotPost(isArabic: isArabic, files: files)
+        let archived = Self.screenshotPost(id: Self.archivedFixtureID, isArabic: isArabic, files: files)
         try? await archiveStore.saveLocalFixture(
-            post: fixture,
+            post: archived,
             files: files.map { (type: $0.type, data: $0.data, filename: $0.filename) }
         )
         libraryPosts = await archiveStore.loadSummaries()
-        if arguments.contains("--ui-results-fixture") { catchState = .ready(fixture) }
+        if arguments.contains("--ui-results-fixture") {
+            // A different post from the one in the library, so the review capture shows the save
+            // actions rather than the already-saved confirmation for the archived fixture.
+            catchState = .ready(Self.screenshotPost(id: UUID(), isArabic: isArabic, files: files))
+        }
     }
+
+    private static let archivedFixtureID = UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!
 
     /// One generated file per media kind, written to a scratch directory so the Catch review can
     /// point its variants at real `file://` addresses.
@@ -223,10 +229,13 @@ final class AppState {
             try? photo.write(to: url, options: .atomic)
             files.append(ScreenshotFile(type: .photo, filename: "0-photo.png", data: photo, url: url, width: 1_080, height: 1_350, duration: nil))
         }
+        // Deliberately short and small. The fixture is built during launch, and encoding a
+        // long clip delayed the library past the first capture, which photographed an empty
+        // archive and called it the empty state.
         let videoURL = scratch.appendingPathComponent("1-video.mp4")
-        if await SyntheticMedia.videoMP4(to: videoURL, width: 1_280, height: 720, seconds: 6),
+        if await SyntheticMedia.videoMP4(to: videoURL, width: 640, height: 360, seconds: 2, fps: 12),
            let data = try? Data(contentsOf: videoURL) {
-            files.append(ScreenshotFile(type: .video, filename: "1-video.mp4", data: data, url: videoURL, width: 1_280, height: 720, duration: 6))
+            files.append(ScreenshotFile(type: .video, filename: "1-video.mp4", data: data, url: videoURL, width: 640, height: 360, duration: 2))
         }
         if let gif = SyntheticMedia.animatedGIF() {
             let url = scratch.appendingPathComponent("2-loop.gif")
@@ -236,10 +245,10 @@ final class AppState {
         return files
     }
 
-    private static func screenshotPost(isArabic: Bool, files: [ScreenshotFile]) -> ResolvedPost {
+    private static func screenshotPost(id: UUID, isArabic: Bool, files: [ScreenshotFile]) -> ResolvedPost {
         let poster = files.first { $0.type == .photo }?.url
         return ResolvedPost(
-            id: UUID(uuidString: "7B5D2A34-B9C1-4F53-9F6F-440DDC5B5130")!,
+            id: id,
             // An X post so the screenshots exercise the platform-faithful replica, not the
             // generic fallback. The living-post capture then shows the x.com-style card.
             platform: .x,

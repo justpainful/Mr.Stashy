@@ -233,7 +233,7 @@
 "support.needsCredential" = "Needs your access";
 
 "resolver.warning.brandingOnly" = "This page only published its own share image, so the saved picture may not be the post's own media.";
-"resolver.warning.candidateLimit" = "This page listed more media than Stashy checks at once. The first %lld item(s) were kept.";
+"resolver.warning.candidateLimit" = "This page listed more media than Stashy checks at once. The first %lld items were kept.";
 "resolver.warning.partialMedia" = "Saved %1$lld of %2$lld item(s). The rest were no longer being served.";
 "resolver.warning.tikTokCoverOnly" = "TikTok did not publish a playable file for this post, so the cover image was saved instead of the video.";
 "resolver.warning.youTubeCoverOnly" = "YouTube publishes no downloadable file address. The title, channel, and cover image were saved; the video stream was not.";

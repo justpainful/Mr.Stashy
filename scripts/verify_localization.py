@@ -24,8 +24,13 @@ INTERPOLATED_USE = re.compile(r'L10n\.(?:value|format)\(\s*"([^"\\]*)\\\(')
 GENERATED_FAMILIES = {
     "tab.": ["catch", "library", "queue", "settings"],
     "platform.": [
-        "tikTok", "instagram", "x", "pinterest", "snapchat", "kick", "threads",
-        "tumblr", "imgur", "youTube", "discord", "directMedia",
+        "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick",
+        "threads", "tumblr", "imgur", "youTube", "discord", "directMedia",
+    ],
+    # The capability paragraphs are keys, resolved from the platform they describe.
+    "support.evidence.": [
+        "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick",
+        "threads", "tumblr", "imgur", "youTube", "discord", "directMedia", "unverified",
     ],
     "media.": ["photo", "video", "audio", "gif"],
     "source.": ["original", "clean", "watermarked", "unknown"],

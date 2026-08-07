@@ -165,6 +165,7 @@ struct LibraryView: View {
                 ForEach(filteredEntries) { item in
                     Button { presentedArchive = ArchiveRoute(archiveID: item.id) } label: { PostCard(summary: item, store: appState.archiveStore) }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("library.postRow")
                         .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

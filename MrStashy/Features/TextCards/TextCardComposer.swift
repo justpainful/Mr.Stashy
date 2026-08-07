@@ -141,15 +141,21 @@ struct TextCardCanvas: View {
             // The card overrides its own layout direction from the post's text and then uses
             // plain `.leading` throughout. Hand-substituting `.trailing` for right-to-left, as
             // this did, mirrors an already direction-relative constant back the wrong way.
-            VStack(alignment: .leading, spacing: 18) {
+            //
+            // Every size here is absolute and proportioned to the 1080×1350 canvas, because that
+            // is the geometry both the preview and the export lay out at. The semantic styles
+            // this used — `.headline`, `.caption` — resolve to phone-sized points, which on a
+            // 1080pt-wide card rendered the author and the source badge as unreadable specks.
+            VStack(alignment: .leading, spacing: 40) {
                 if configuration.includeAuthor {
-                    HStack(spacing: 9) {
+                    HStack(spacing: 20) {
                         Image(systemName: "person.crop.circle.fill")
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(post.author.displayName).font(.system(.headline, design: .rounded, weight: .bold))
+                            .font(.system(size: 62))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(post.author.displayName)
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
                             if let handle = post.author.displayHandle {
-                                Text(handle).font(.caption).opacity(0.75)
+                                Text(handle).font(.system(size: 30, design: .rounded)).opacity(0.75)
                             }
                         }
                         Spacer(minLength: 0)
@@ -163,20 +169,22 @@ struct TextCardCanvas: View {
                     cardText(size: fontSizes[3])
                 }
 
-                HStack {
+                HStack(spacing: 20) {
                     Text(L10n.value(post.platform.titleKey))
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .overlay(Capsule().stroke(colors.foreground.opacity(0.35), lineWidth: 1))
-                    Spacer()
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 14)
+                        .overlay(Capsule().stroke(colors.foreground.opacity(0.45), lineWidth: 2))
+                    Spacer(minLength: 0)
                     if configuration.includeTimestamp, let createdAt = post.createdAt {
-                        Text(createdAt, style: .date).font(.caption).opacity(0.75)
+                        Text(L10n.date(createdAt, time: .omitted))
+                            .font(.system(size: 28, design: .rounded))
+                            .opacity(0.75)
                     }
                 }
             }
             .foregroundStyle(colors.foreground)
-            .padding(34)
+            .padding(64)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .environment(\.layoutDirection, post.text.isRightToLeftText ? .rightToLeft : .leftToRight)
@@ -195,11 +203,14 @@ struct TextCardCanvas: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
+    /// Sized for the 1080-point canvas, largest first; `ViewThatFits` takes the first that does
+    /// not overflow. The previous values were phone-sized and left a wall of empty card under
+    /// two lines of text.
     private var fontSizes: [CGFloat] {
         switch style {
-        case .compact: [32, 29, 26, 23]
-        case .neutral: [40, 35, 30, 26]
-        case .editorial: [44, 38, 32, 27]
+        case .compact: [76, 64, 54, 44]
+        case .neutral: [96, 80, 66, 52]
+        case .editorial: [112, 92, 74, 58]
         }
     }
 
