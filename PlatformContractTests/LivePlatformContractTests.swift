@@ -32,7 +32,10 @@ struct LivePlatformContractTests {
         (.instagram, "https://www.instagram.com/p/CyXaQ8Ir4sh/"),
         (.x, "https://x.com/jack/status/20"),
         (.reddit, "https://www.reddit.com/r/aww/comments/2ff9dr/tucked_in/"),
-        (.bluesky, "https://bsky.app/profile/bsky.app/post/3l6oveex3ii2l"),
+        // A post that actually carries a picture. The first fixture chosen here was text-only,
+        // so the contract recorded "no media was found" — a true statement about that post and
+        // no test of the adapter at all.
+        (.bluesky, "https://bsky.app/profile/bsky.app/post/3mmwmla3xph26"),
         (.pinterest, "https://www.pinterest.com/pin/99290459813297/"),
         (.snapchat, "https://www.snapchat.com/spotlight"),
         (.kick, "https://kick.com/xqc"),
