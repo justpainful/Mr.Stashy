@@ -31,6 +31,7 @@ GENERATED_FAMILIES = {
     "support.evidence.": [
         "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick",
         "threads", "tumblr", "imgur", "youTube", "discord", "directMedia", "unverified",
+        "noLiveResult",
     ],
     "media.": ["photo", "video", "audio", "gif"],
     "source.": ["original", "clean", "watermarked", "unknown"],

@@ -352,3 +352,4 @@
 "library.database.unknownError" = "Unknown database error";
 "library.database.openFailed" = "Could not open the Stashy library index: %@";
 "library.database.statementFailed" = "Could not update the Stashy library index: %@";
+"support.evidence.noLiveResult" = "No complete live check was produced for this build.";

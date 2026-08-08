@@ -55,7 +55,7 @@ def main() -> int:
         )
     lines.extend(
         [
-            '        .init(platform: .discord, status: .blocked, evidence: "Bot-only, permission-scoped integration is not configured")',
+            '        .init(platform: .discord, status: .blocked, evidence: "support.evidence.discord")',
             "    ]",
             "}",
             "",

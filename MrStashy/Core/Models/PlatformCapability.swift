@@ -42,7 +42,14 @@ enum PlatformCapabilityRegistry {
             case .failing, .blocked:
                 var narrowed = capability
                 narrowed.status = evidence.status
-                narrowed.evidenceSource = evidence.evidenceSource
+                if L10n.localizedIfPresent(evidence.evidenceSource) != nil {
+                    // The run reported a sentence Stashy authored, so it is translated.
+                    narrowed.evidenceSource = evidence.evidenceSource
+                } else {
+                    // Per-revision diagnostic prose. It is shown after the translated
+                    // explanation, never instead of it.
+                    narrowed.liveDiagnostic = evidence.evidenceSource
+                }
                 return narrowed
             case .notShipped:
                 // No live contract completed for this revision. Calling a source Verified on the

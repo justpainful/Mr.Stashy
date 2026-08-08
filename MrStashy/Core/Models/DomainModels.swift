@@ -294,15 +294,21 @@ struct PlatformCapability: Codable, Hashable, Sendable, Identifiable {
     /// Set when no live check completed for this build, so the description is what the adapter
     /// is written to do rather than what was last observed.
     var isUnverified = false
+    /// What a live run reported, when it reported something a pre-written sentence cannot say.
+    /// It is produced per revision and cannot be translated ahead of time, so it is shown after
+    /// the translated explanation rather than in place of it — replacing the explanation with it
+    /// is what left one source's paragraph in English on an otherwise Arabic screen.
+    var liveDiagnostic: String?
     var id: Platform { platform }
 
-    /// The sentence a person reads. It resolves on every read rather than being baked in, so it
+    /// The sentence a person reads. It composes on every read rather than being baked in, so it
     /// follows the language picker — the registry itself is built once, at launch, long before
     /// anyone has chosen a language.
     var evidence: String {
-        let base = L10n.localizedIfPresent(evidenceSource) ?? evidenceSource
-        guard isUnverified else { return base }
-        return "\(base) \(L10n.value("support.evidence.unverified"))"
+        var parts = [L10n.localizedIfPresent(evidenceSource) ?? evidenceSource]
+        if isUnverified { parts.append(L10n.value("support.evidence.unverified")) }
+        if let liveDiagnostic, !liveDiagnostic.isEmpty { parts.append(liveDiagnostic) }
+        return parts.joined(separator: " ")
     }
 
     enum CodingKeys: String, CodingKey {

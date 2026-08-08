@@ -352,3 +352,4 @@
 "library.database.unknownError" = "خطأ غير معروف في قاعدة البيانات";
 "library.database.openFailed" = "تعذّر فتح فهرس مكتبة ستاشي: %@";
 "library.database.statementFailed" = "تعذّر تحديث فهرس مكتبة ستاشي: %@";
+"support.evidence.noLiveResult" = "لم يُنتَج فحص مباشر كامل لهذا الإصدار.";
