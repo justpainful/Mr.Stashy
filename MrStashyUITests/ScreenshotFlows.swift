@@ -18,7 +18,11 @@ final class ScreenshotFlows: XCTestCase {
         app.buttons["onboarding.skip"].tap()
         capture(app, named: "catch-empty.png")
         let tikTok = app.buttons["catch.source.tikTok"]
-        XCTAssertTrue(tikTok.waitForExistence(timeout: 5))
+        XCTAssertTrue(tikTok.waitForExistence(timeout: 5), "TikTok is advertised as a source but is not on the Catch screen")
+        // A source that exists but cannot be reached is not offered. The picker used to hide ten
+        // of its fourteen entries off the right edge, which is what this catches.
+        for _ in 0 ..< 5 where !tikTok.isHittable { app.swipeUp() }
+        XCTAssertTrue(tikTok.isHittable, "TikTok is on the Catch screen but cannot be reached")
         tikTok.tap()
         capture(app, named: "source-picker-tiktok.png")
         app.buttons["Cancel"].tap()

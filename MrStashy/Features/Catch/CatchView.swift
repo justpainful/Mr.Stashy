@@ -103,36 +103,38 @@ struct CatchView: View {
         Task { await appState.resolve(link) }
     }
 
+    /// Every source Stashy can read, all visible at once.
+    ///
+    /// This was a horizontal strip with hidden scroll indicators. With fourteen sources, ten of
+    /// them sat off the right edge with nothing on screen saying they were there — so most of
+    /// what the app supports was undiscoverable, and unreachable by anyone who cannot drag.
     private var sourcePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(L10n.value("catch.sources"))
                 .font(.subheadline.weight(.semibold))
-            ScrollView(.horizontal) {
-                HStack(spacing: 12) {
-                    ForEach(PlatformCapabilityRegistry.usable) { capability in
-                        Button { selectedSource = capability.platform } label: {
-                            VStack(spacing: 5) {
-                                PlatformIcon(platform: capability.platform, size: 42)
-                                Text(L10n.value(capability.platform.titleKey))
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                                    .foregroundStyle(StashyTheme.ink)
-                            }
-                            .frame(width: 58)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 66), spacing: 10)], alignment: .leading, spacing: 12) {
+                ForEach(PlatformCapabilityRegistry.usable) { capability in
+                    Button { selectedSource = capability.platform } label: {
+                        VStack(spacing: 5) {
+                            PlatformIcon(platform: capability.platform, size: 42, isDecorative: true)
+                            Text(L10n.value(capability.platform.titleKey))
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(StashyTheme.ink)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("catch.source.\(capability.platform.rawValue)")
-                        .accessibilityLabel(Text(L10n.format(
-                            "catch.source.accessibility",
-                            L10n.value(capability.platform.titleKey),
-                            L10n.value(capability.status.titleKey)
-                        )))
+                        .frame(maxWidth: .infinity, minHeight: 66)
                     }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("catch.source.\(capability.platform.rawValue)")
+                    .accessibilityLabel(Text(L10n.format(
+                        "catch.source.accessibility",
+                        L10n.value(capability.platform.titleKey),
+                        L10n.value(capability.status.titleKey)
+                    )))
                 }
-                .padding(.vertical, 2)
             }
-            .scrollIndicators(.hidden)
         }
     }
 
