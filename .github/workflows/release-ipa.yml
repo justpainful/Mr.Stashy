@@ -27,13 +27,20 @@ jobs:
           test -d "$XCODE_PATH"
           sudo xcode-select --switch "$XCODE_PATH"
           xcodebuild -version
+      # The runner's own `python3` is Homebrew's, which is externally managed, so `pip install`
+      # refuses outright (PEP 668) and this job could never get past asset validation. Every
+      # other workflow already provisions its own interpreter; this one did not.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: jdx/mise-action@v2
       - name: Bootstrap project
         run: bash scripts/bootstrap.sh
-      - name: Validate genuine-alpha production assets
+      - name: Validate genuine-alpha production assets and localization
         run: |
           python3 -m pip install --requirement requirements-dev.txt
           python3 scripts/verify_assets.py
+          python3 scripts/verify_localization.py
       - name: Run deterministic tests
         run: |
           device="$(bash scripts/boot_simulator.sh)"
