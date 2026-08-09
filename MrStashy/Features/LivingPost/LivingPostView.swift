@@ -170,6 +170,7 @@ struct LivingPostView: View {
             Button(L10n.value("action.done")) { dismiss() }
                 .font(.subheadline.weight(.semibold))
                 .frame(minHeight: 44)
+                .accessibilityIdentifier("livingPost.done")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

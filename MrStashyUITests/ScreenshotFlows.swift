@@ -62,7 +62,11 @@ final class ScreenshotFlows: XCTestCase {
         XCTAssertTrue(firstLibraryRow.waitForExistence(timeout: 8))
         firstLibraryRow.tap()
         capture(app, named: "living-post.png")
-        app.navigationBars.buttons.firstMatch.tap()
+        // A saved post gives the whole screen to the platform, so there is no Stashy navigation
+        // bar to dismiss from. The way out is the archive strip Stashy keeps along the bottom.
+        let done = app.buttons["livingPost.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "A saved post has no way back to the library")
+        done.tap()
 
         openTab("Settings", in: app)
         capture(app, named: "settings.png")
