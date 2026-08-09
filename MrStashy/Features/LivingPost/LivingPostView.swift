@@ -183,7 +183,9 @@ struct LivingPostView: View {
         .overlay(alignment: .top) { Divider() }
         .environment(\.colorScheme, appState.settings.appearance.resolvedScheme)
         .tint(StashyTheme.accent(for: appState.settings.theme))
-        .accessibilityIdentifier("livingPost.archiveStrip")
+        // No identifier on this container: an accessibility identifier applied to a stack
+        // propagates down and overwrites the ones its children set, which is what made the
+        // strip's own Done button unreachable while it was plainly on screen.
     }
 
     private func menu(_ manifest: ArchiveManifest) -> some View {
