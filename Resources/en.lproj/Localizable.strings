@@ -353,3 +353,11 @@
 "library.database.openFailed" = "Could not open the Stashy library index: %@";
 "library.database.statementFailed" = "Could not update the Stashy library index: %@";
 "support.evidence.noLiveResult" = "No complete live check was produced for this build.";
+/* The platform's own bar above a saved post */
+"replica.bar.post" = "Post";
+"replica.bar.thread" = "Thread";
+"replica.bar.video" = "Video";
+"replica.bar.pin" = "Pin";
+"replica.bar.story" = "Story";
+"replica.bar.clip" = "Clip";
+"livingPost.keptFrom" = "Kept from %@";

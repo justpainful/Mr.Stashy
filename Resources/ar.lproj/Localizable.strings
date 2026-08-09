@@ -353,3 +353,11 @@
 "library.database.openFailed" = "تعذّر فتح فهرس مكتبة ستاشي: %@";
 "library.database.statementFailed" = "تعذّر تحديث فهرس مكتبة ستاشي: %@";
 "support.evidence.noLiveResult" = "لم يُنتَج فحص مباشر كامل لهذا الإصدار.";
+/* The platform's own bar above a saved post */
+"replica.bar.post" = "منشور";
+"replica.bar.thread" = "سلسلة";
+"replica.bar.video" = "فيديو";
+"replica.bar.pin" = "بِن";
+"replica.bar.story" = "قصة";
+"replica.bar.clip" = "مقطع";
+"livingPost.keptFrom" = "محفوظ من %@";

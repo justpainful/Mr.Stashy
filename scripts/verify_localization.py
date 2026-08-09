@@ -34,6 +34,7 @@ GENERATED_FAMILIES = {
         "noLiveResult",
     ],
     "media.": ["photo", "video", "audio", "gif"],
+    "replica.bar.": ["post", "thread", "video", "pin", "story", "clip"],
     "source.": ["original", "clean", "watermarked", "unknown"],
     "support.": ["passing", "limited", "needsCredential", "failing", "blocked", "notShipped"],
     "catch.stage.": [
