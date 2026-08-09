@@ -797,7 +797,7 @@ private struct PinterestWidgetResponse: Decodable {
                 // original sits at the same path under `originals/`. It is offered first and the
                 // published rendition second, so the archive keeps the real picture when the
                 // host serves it and still keeps something when it does not.
-                if let original = Self.originalAddress(for: url) {
+                if let original = PinterestOriginalAddress.make(from: url) {
                     results.append(MediaCandidate(
                         url: original, declaredType: nil, kind: nil,
                         qualityLabel: "Original size", cleanliness: .original
@@ -810,19 +810,6 @@ private struct PinterestWidgetResponse: Decodable {
                 ))
             }
             return results
-        }
-
-        /// `https://i.pinimg.com/564x/ab/cd/ef/hash.jpg` → `.../originals/ab/cd/ef/hash.jpg`.
-        static func originalAddress(for url: URL) -> URL? {
-            guard url.host?.lowercased().contains("pinimg.com") == true else { return nil }
-            var components = url.pathComponents.filter { $0 != "/" }
-            guard let first = components.first, first != "originals" else { return nil }
-            // The size segment is the leading one: `564x`, `236x`, `60x60_RS`.
-            guard first.contains("x") || first.hasSuffix("_RS") else { return nil }
-            components[0] = "originals"
-            var rebuilt = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            rebuilt?.path = "/" + components.joined(separator: "/")
-            return rebuilt?.url
         }
     }
 
@@ -1029,5 +1016,24 @@ private struct XAPIVariant: Decodable {
         case url
         case contentType = "content_type"
         case bitRate = "bit_rate"
+    }
+}
+
+/// Pinterest serves every rendition of a pin as a resize of one file, and the full-size original
+/// sits at the same path under `originals/`. Deriving it is what keeps an archive from holding a
+/// 564-point thumbnail of a picture the host still serves in full.
+enum PinterestOriginalAddress {
+    /// `https://i.pinimg.com/564x/ab/cd/ef/hash.jpg` -> `.../originals/ab/cd/ef/hash.jpg`,
+    /// or `nil` when the address is not a sized rendition.
+    static func make(from url: URL) -> URL? {
+        guard url.host?.lowercased().contains("pinimg.com") == true else { return nil }
+        var components = url.pathComponents.filter { $0 != "/" }
+        guard let first = components.first, first != "originals" else { return nil }
+        // The size segment leads the path: `564x`, `236x`, `60x60_RS`.
+        guard first.contains("x") || first.hasSuffix("_RS") else { return nil }
+        components[0] = "originals"
+        var rebuilt = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        rebuilt?.path = "/" + components.joined(separator: "/")
+        return rebuilt?.url
     }
 }

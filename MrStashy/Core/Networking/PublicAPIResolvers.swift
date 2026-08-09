@@ -508,7 +508,10 @@ struct TumblrResolver: PlatformResolver {
 /// variants cannot be derived from one another — they have to be collected and compared. The
 /// segment before the size is stable per image, which is what groups them.
 enum TumblrMedia {
-    private static let pattern = #"https://[0-9a-z.]*media\.tumblr\.com/([0-9a-f]+/[0-9a-f-]+)/(s(\d+)x(\d+)[^/"'\]*)/([^"'\\s)]+?\.(?:jpg|jpeg|png|gifv|gif|mp4|webp))"#
+    /// `pnj` is Tumblr's own extension for a PNG delivered as WebP, and it is what most of their
+    /// images actually end in — leaving it out matched nothing at all on a real post.
+    private static let pattern =
+        #"https://[0-9a-z.]*media\.tumblr\.com/([0-9a-f]+/[0-9a-f-]+)/(s(\d+)x(\d+)[^/"']*)/([^"'\s)]+?\.(?:pnj|jpe?g|png|gifv|gif|mp4|webp|webm))"#
 
     static func candidates(in html: String) -> [MediaCandidate] {
         guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
@@ -521,6 +524,7 @@ enum TumblrMedia {
         for match in expression.matches(in: html, range: range) {
             guard let whole = Range(match.range, in: html),
                   let identifierRange = Range(match.range(at: 1), in: html),
+                  let sizeRange = Range(match.range(at: 2), in: html),
                   let widthRange = Range(match.range(at: 3), in: html),
                   let heightRange = Range(match.range(at: 4), in: html),
                   let url = URL(string: String(html[whole]))
@@ -528,8 +532,11 @@ enum TumblrMedia {
             let identifier = String(html[identifierRange])
             let width = Int(html[widthRange]) ?? 0
             let height = Int(html[heightRange]) ?? 0
-            // An avatar or a blog header is site furniture, not the post.
+            // Site furniture, not the post. A tiny rendition is a thumbnail, and Tumblr marks a
+            // centre-cropped square — which is what it serves avatars as — with a `u_c` suffix
+            // on the size segment.
             guard width >= 250, height >= 150 else { continue }
+            guard !String(html[sizeRange]).contains("u_c") else { continue }
             if order.firstIndex(of: identifier) == nil { order.append(identifier) }
             if let existing = bestByImage[identifier], existing.width >= width { continue }
             bestByImage[identifier] = (url, width, height)
