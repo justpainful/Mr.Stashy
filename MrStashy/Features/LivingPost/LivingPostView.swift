@@ -167,10 +167,13 @@ struct LivingPostView: View {
             }
             Spacer(minLength: 0)
             menu(manifest)
+            // The identifier goes on the button itself. Applied after a `.frame`, it lands on the
+            // wrapper instead, and `app.buttons[...]` — which matches on element type as well as
+            // identifier — then finds nothing.
             Button(L10n.value("action.done")) { dismiss() }
+                .accessibilityIdentifier("livingPost.done")
                 .font(.subheadline.weight(.semibold))
                 .frame(minHeight: 44)
-                .accessibilityIdentifier("livingPost.done")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
