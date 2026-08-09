@@ -17,8 +17,16 @@ struct MediaCandidate: Sendable, Hashable {
     /// Headers the source requires in order to serve this address, such as a `Referer`.
     var headers: [String: String] = [:]
 
+    /// What this candidate actually is.
+    ///
+    /// Evidence beats a guess. `kind` is inferred from the JSON key an address was found under,
+    /// and a key is not a fact: TikTok publishes the post's *music track* under `playUrl`, the
+    /// same key other sources use for a video. Trusting the key over the `.mp3` in the address
+    /// is what filed a song as the post's video and left people with a saved "video" that was
+    /// only sound. The key's hint is used only where the address and the server both say nothing.
     var resolvedType: MediaType {
-        kind ?? MediaType(candidateURL: url, declaredType: declaredType)
+        if let stated = MediaType.stated(candidateURL: url, declaredType: declaredType) { return stated }
+        return kind ?? .photo
     }
 
     /// A player page, an embed frame, or a tracking pixel is not savable media. Accepting one is
@@ -39,16 +47,25 @@ struct MediaCandidate: Sendable, Hashable {
 }
 
 extension MediaType {
-    /// Chooses a media kind from a declared MIME type first, then the address itself.
-    init(candidateURL url: URL, declaredType: String? = nil) {
+    /// The kind the declared MIME type or the address states outright, or `nil` when neither
+    /// says anything — a signed CDN address with no path extension, typically.
+    static func stated(candidateURL url: URL, declaredType: String? = nil) -> MediaType? {
         let declared = (declaredType ?? "").lowercased()
         let ext = url.pathExtension.lowercased()
-        if declared.contains("gif") || ext == "gif" { self = .gif }
-        else if declared.hasPrefix("video") || declared.contains("video/") || declared.contains("mpegurl")
-                    || ["mp4", "mov", "m4v", "webm", "m3u8", "mpd"].contains(ext) { self = .video }
-        else if declared.hasPrefix("audio") || declared.contains("audio/")
-                    || ["mp3", "m4a", "wav", "aac", "flac", "oga", "ogg"].contains(ext) { self = .audio }
-        else { self = .photo }
+        if declared.contains("gif") || ext == "gif" { return .gif }
+        if declared.hasPrefix("video") || declared.contains("video/") || declared.contains("mpegurl")
+            || ["mp4", "mov", "m4v", "webm", "m3u8", "mpd"].contains(ext) { return .video }
+        if declared.hasPrefix("audio") || declared.contains("audio/")
+            || ["mp3", "m4a", "wav", "aac", "flac", "oga", "ogg", "opus"].contains(ext) { return .audio }
+        if declared.hasPrefix("image") || declared.contains("image/")
+            || ["jpg", "jpeg", "png", "heic", "heif", "webp", "avif", "bmp", "tiff"].contains(ext) { return .photo }
+        return nil
+    }
+
+    /// Chooses a media kind from a declared MIME type first, then the address itself. A source
+    /// that states nothing is treated as a picture, which is what a bare CDN address usually is.
+    init(candidateURL url: URL, declaredType: String? = nil) {
+        self = MediaType.stated(candidateURL: url, declaredType: declaredType) ?? .photo
     }
 }
 
@@ -250,6 +267,11 @@ enum InlineJSONMediaExtractor {
         "src_url", "image_url", "imageUrl", "media_url_https", "url_overridden_by_dest", "clip_url"
     ]
 
+    /// Keys that name a post's backing track rather than the post. On TikTok the sound is a
+    /// first-class object with its own address, and picking it up as the post's media is how a
+    /// saved video turned out to be a song.
+    private static let soundtrackKeys: Set<String> = ["playUrl"]
+
     static func candidates(in html: String, baseURL: URL) -> [MediaCandidate] {
         var results: [MediaCandidate] = []
         var seen = Set<String>()
@@ -270,11 +292,16 @@ enum InlineJSONMediaExtractor {
         return results
     }
 
+    /// The kind a key suggests, used only when the address itself states nothing. `playUrl` is a
+    /// soundtrack, not a video: naming it one is what made a saved TikTok play as a song over a
+    /// black screen. Typed honestly, the video filter drops it and the capture falls through to
+    /// the path that saves what the post actually shows.
     private static func kindFor(key: String) -> MediaType? {
+        if soundtrackKeys.contains(key) { return .audio }
         switch key {
-        case "playAddr", "downloadAddr", "video_url", "videoUrl", "hlsUrl", "playUrl", "clip_url": .video
-        case "image_url", "imageUrl", "media_url_https": .photo
-        default: nil
+        case "playAddr", "downloadAddr", "video_url", "videoUrl", "hlsUrl", "clip_url": return .video
+        case "image_url", "imageUrl", "media_url_https": return .photo
+        default: return nil
         }
     }
 }
@@ -308,7 +335,12 @@ enum AccessWallDetector {
     private static let markers = [
         "accounts/login", "/login?", "login_and_signup", "please log in", "log in to continue",
         "sign up to continue", "restricted_page", "age-restricted",
-        "content isn't available", "content is not available", "gdpr-consent"
+        "content isn't available", "content is not available", "gdpr-consent",
+        // Meta stopped shipping the older markers. A signed-out request for an Instagram or
+        // Threads post now returns their app shell, whose route table names the login page —
+        // checked here so the reason reaches the person as "this source wants an account"
+        // rather than as "this post has no media", which blames the post.
+        "polaris.loginpage", "logincipcanvasfingerprint", "fetaloginstatusdata"
     ]
 
     /// Phrases that identify a private post. A bare "private" also matches ordinary payload

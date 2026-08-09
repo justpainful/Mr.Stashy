@@ -453,3 +453,114 @@ private struct BlueskyPost: Decodable {
         return results
     }
 }
+
+// MARK: - Tumblr
+
+/// Tumblr publishes no usable public API — its own `api/v2` wants a key and its oEmbed endpoint
+/// answers with an error page — but a post page does serve every image it holds, at several
+/// sizes, from `media.tumblr.com`. This reads those directly and keeps the largest of each.
+struct TumblrResolver: PlatformResolver {
+    let platform: Platform = .tumblr
+    private let engine: PageResolutionEngine
+
+    init(client: any ResolverHTTPClient = URLSessionResolverHTTPClient(), prober: any MediaProbing = PassthroughMediaProber()) {
+        engine = PageResolutionEngine(platform: .tumblr, client: client, prober: prober)
+    }
+
+    func canHandle(_ url: URL) -> Bool { URLCanonicalizer.platform(for: url) == .tumblr }
+
+    func resolve(_ request: ResolveRequest) async throws -> ResolvedPost {
+        // The browser profile, not the crawler one: Tumblr answers the crawler identity with a
+        // content screen and the browser identity with the post.
+        let page = try await engine.fetcher.firstUsablePage(
+            at: request.canonicalURL,
+            profiles: [.browser, .metadataCrawler]
+        ) { candidate in
+            !TumblrMedia.candidates(in: candidate.html).isEmpty
+        }
+
+        var candidates = TumblrMedia.candidates(in: page.html)
+        if candidates.isEmpty {
+            // Nothing of the post's own; fall back to whatever the page published about itself,
+            // which the shared engine already knows how to read.
+            candidates = PageMediaExtractor.candidates(in: page.html, baseURL: page.url)
+        }
+        guard !candidates.isEmpty else {
+            if let wall = AccessWallDetector.wall(in: page, requested: request.canonicalURL) { throw wall }
+            throw ResolverError.mediaMissing
+        }
+        let document = OpenGraphDocument(html: page.html)
+        return try await engine.post(
+            from: candidates,
+            request: request,
+            page: page,
+            document: document,
+            resolverVersion: "tumblr-post-media.1",
+            author: TumblrMedia.author(for: request.canonicalURL, document: document),
+            text: document.description ?? document.title ?? ""
+        )
+    }
+}
+
+/// Reads `media.tumblr.com` addresses out of a served post page.
+///
+/// Tumblr renders the same picture at several sizes and gives each its own filename, so the
+/// variants cannot be derived from one another — they have to be collected and compared. The
+/// segment before the size is stable per image, which is what groups them.
+enum TumblrMedia {
+    private static let pattern = #"https://[0-9a-z.]*media\.tumblr\.com/([0-9a-f]+/[0-9a-f-]+)/(s(\d+)x(\d+)[^/"'\]*)/([^"'\\s)]+?\.(?:jpg|jpeg|png|gifv|gif|mp4|webp))"#
+
+    static func candidates(in html: String) -> [MediaCandidate] {
+        guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let range = NSRange(html.startIndex ..< html.endIndex, in: html)
+
+        /// The largest rendition seen for each image, in the order the images first appear.
+        var bestByImage: [String: (url: URL, width: Int, height: Int)] = [:]
+        var order: [String] = []
+
+        for match in expression.matches(in: html, range: range) {
+            guard let whole = Range(match.range, in: html),
+                  let identifierRange = Range(match.range(at: 1), in: html),
+                  let widthRange = Range(match.range(at: 3), in: html),
+                  let heightRange = Range(match.range(at: 4), in: html),
+                  let url = URL(string: String(html[whole]))
+            else { continue }
+            let identifier = String(html[identifierRange])
+            let width = Int(html[widthRange]) ?? 0
+            let height = Int(html[heightRange]) ?? 0
+            // An avatar or a blog header is site furniture, not the post.
+            guard width >= 250, height >= 150 else { continue }
+            if order.firstIndex(of: identifier) == nil { order.append(identifier) }
+            if let existing = bestByImage[identifier], existing.width >= width { continue }
+            bestByImage[identifier] = (url, width, height)
+        }
+
+        return order.compactMap { identifier in
+            guard let best = bestByImage[identifier] else { return nil }
+            return MediaCandidate(
+                url: best.url,
+                declaredType: nil,
+                kind: nil,
+                width: best.width,
+                height: best.height,
+                qualityLabel: "Largest published size",
+                cleanliness: .original
+            )
+        }
+    }
+
+    /// `www.tumblr.com/<blog>/<id>` names the blog in its path, which is the only author the
+    /// page reliably states.
+    static func author(for url: URL, document: OpenGraphDocument) -> ResolvedAuthor {
+        let segments = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+        let blog = segments.first
+        return ResolvedAuthor(
+            platformID: nil,
+            displayName: document.siteName.flatMap { $0 == "Tumblr" ? nil : $0 } ?? blog ?? "Tumblr",
+            username: blog,
+            avatarURL: blog.flatMap { URL(string: "https://api.tumblr.com/v2/blog/\($0)/avatar/96") },
+            profileURL: blog.flatMap { URL(string: "https://www.tumblr.com/\($0)") },
+            badges: []
+        )
+    }
+}

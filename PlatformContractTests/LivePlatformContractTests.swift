@@ -36,11 +36,14 @@ struct LivePlatformContractTests {
         // so the contract recorded "no media was found" — a true statement about that post and
         // no test of the adapter at all.
         (.bluesky, "https://bsky.app/profile/bsky.app/post/3mmwmla3xph26"),
-        (.pinterest, "https://www.pinterest.com/pin/99290459813297/"),
+        // The previous pin had been deleted; Pinterest's own oEmbed reported it gone, so the
+        // contract was measuring a 404 rather than the adapter.
+        (.pinterest, "https://www.pinterest.com/pin/117304765294445383/"),
         (.snapchat, "https://www.snapchat.com/spotlight"),
         (.kick, "https://kick.com/xqc"),
         (.threads, "https://www.threads.net/@zuck"),
-        (.tumblr, "https://staff.tumblr.com/"),
+        // A post, not a blog index — and on the host Tumblr actually serves to a reader.
+        (.tumblr, "https://www.tumblr.com/zoesupreme/824038832417767424"),
         (.imgur, "https://imgur.com/gallery/oCsGh"),
         (.youTube, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     ]

@@ -95,7 +95,7 @@ struct ResolverRegistry: Sendable {
             PublicOpenGraphResolver(platform: .snapchat, client: client, prober: mediaProber),
             // Threads answers a signed-out reader with a login page, not an empty post.
             PublicOpenGraphResolver(platform: .threads, client: client, prober: mediaProber, emptyResultError: .authenticationRequired),
-            PublicOpenGraphResolver(platform: .tumblr, client: client, prober: mediaProber),
+            TumblrResolver(client: client, prober: mediaProber),
             // Last: a public page on a source with no dedicated adapter can still publish its
             // media the ordinary way, and a blog or news post should not be refused outright.
             GenericPageResolver(client: client, prober: mediaProber)

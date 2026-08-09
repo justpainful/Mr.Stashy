@@ -178,3 +178,46 @@ private struct RoutedFixtureClient: ResolverHTTPClient {
         return (Data(body.utf8), response)
     }
 }
+
+/// TikTok publishes the post's backing track next to the post's video, under a key other
+/// sources use for video. Getting that wrong turned a saved video into a song.
+struct MediaKindClassificationTests {
+    @Test func aSoundtrackAddressIsNeverClaimedAsTheVideo() throws {
+        let page = """
+        <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">{
+          "video":{"playAddr":"https://v16.tiktokcdn.com/video/tos/useast/abc?mime_type=video_mp4"},
+          "music":{"playUrl":"https://sf16.tiktokcdn.com/obj/tos-music/7100000000000000000.mp3"}
+        }</script>
+        """
+        let base = try #require(URL(string: "https://www.tiktok.com/@stashy/video/1234567890"))
+        let candidates = InlineJSONMediaExtractor.candidates(in: page, baseURL: base)
+
+        let soundtrack = try #require(candidates.first { $0.url.absoluteString.hasSuffix(".mp3") })
+        #expect(soundtrack.resolvedType == .audio, "the music track must not be typed as the video")
+
+        let video = try #require(candidates.first { $0.url.absoluteString.contains("/video/tos/") })
+        #expect(video.resolvedType == .video)
+
+        // Which is what makes TikTok's own "keep only the video" filter behave.
+        #expect(candidates.filter { $0.resolvedType == .video }.count == 1)
+    }
+
+    @Test func theAddressOutranksTheKeyItWasFoundUnder() throws {
+        let url = try #require(URL(string: "https://cdn.example.com/track.mp3"))
+        // A key hint claiming video cannot survive an address that says otherwise.
+        let mislabelled = MediaCandidate(url: url, declaredType: nil, kind: .video, qualityLabel: "hint")
+        #expect(mislabelled.resolvedType == .audio)
+
+        let signed = try #require(URL(string: "https://cdn.example.com/play?token=abc"))
+        // With nothing stated anywhere, the hint is all there is and is used.
+        let unstated = MediaCandidate(url: signed, declaredType: nil, kind: .video, qualityLabel: "hint")
+        #expect(unstated.resolvedType == .video)
+    }
+
+    @Test func aDeclaredContentTypeOutranksTheExtension() throws {
+        let url = try #require(URL(string: "https://cdn.example.com/asset.bin"))
+        #expect(MediaCandidate(url: url, declaredType: "video/mp4", kind: nil, qualityLabel: "x").resolvedType == .video)
+        #expect(MediaCandidate(url: url, declaredType: "audio/mpeg", kind: nil, qualityLabel: "x").resolvedType == .audio)
+        #expect(MediaCandidate(url: url, declaredType: "image/png", kind: nil, qualityLabel: "x").resolvedType == .photo)
+    }
+}

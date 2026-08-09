@@ -721,9 +721,20 @@ private struct XSyndicationPost: Decodable {
 
 private struct PinterestWidgetResponse: Decodable {
     struct Pin: Decodable {
+        /// Pinterest keys its renditions by size — `236x`, `564x`, sometimes `orig` — and which
+        /// keys appear varies by pin. Decoding only `orig`, as this did, meant that the day
+        /// Pinterest stopped publishing that key every pin resolved to nothing.
         struct Images: Decodable {
-            let original: Image?
-            enum CodingKeys: String, CodingKey { case original = "orig" }
+            let renditions: [String: Image]
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.singleValueContainer()
+                renditions = (try? container.decode([String: Image].self)) ?? [:]
+            }
+
+            var largest: Image? {
+                renditions["orig"] ?? renditions.values.max { ($0.width ?? 0) < ($1.width ?? 0) }
+            }
         }
         struct Image: Decodable {
             let url: String?
@@ -781,14 +792,37 @@ private struct PinterestWidgetResponse: Decodable {
                     qualityLabel: "Source rendition"
                 ))
             }
-            if let image = images?.original, let source = image.url, let url = URL(string: source) {
+            if let image = images?.largest, let source = image.url, let url = URL(string: source) {
+                // Every rendition Pinterest publishes is a resize of one file, and the full-size
+                // original sits at the same path under `originals/`. It is offered first and the
+                // published rendition second, so the archive keeps the real picture when the
+                // host serves it and still keeps something when it does not.
+                if let original = Self.originalAddress(for: url) {
+                    results.append(MediaCandidate(
+                        url: original, declaredType: nil, kind: nil,
+                        qualityLabel: "Original size", cleanliness: .original
+                    ))
+                }
                 results.append(MediaCandidate(
                     url: url, declaredType: nil, kind: nil,
                     width: image.width, height: image.height,
-                    qualityLabel: "Original size", cleanliness: .original
+                    qualityLabel: "Published rendition"
                 ))
             }
             return results
+        }
+
+        /// `https://i.pinimg.com/564x/ab/cd/ef/hash.jpg` → `.../originals/ab/cd/ef/hash.jpg`.
+        static func originalAddress(for url: URL) -> URL? {
+            guard url.host?.lowercased().contains("pinimg.com") == true else { return nil }
+            var components = url.pathComponents.filter { $0 != "/" }
+            guard let first = components.first, first != "originals" else { return nil }
+            // The size segment is the leading one: `564x`, `236x`, `60x60_RS`.
+            guard first.contains("x") || first.hasSuffix("_RS") else { return nil }
+            components[0] = "originals"
+            var rebuilt = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            rebuilt?.path = "/" + components.joined(separator: "/")
+            return rebuilt?.url
         }
     }
 

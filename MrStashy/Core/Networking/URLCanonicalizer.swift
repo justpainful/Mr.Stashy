@@ -33,8 +33,11 @@ enum URLCanonicalizer {
               ["http", "https"].contains(components.scheme?.lowercased() ?? "") else {
             throw ResolverError.invalidURL
         }
+        if let rehosted = tumblrCanonicalForm(host: host, path: components.path) {
+            components = rehosted
+        }
         components.scheme = "https"
-        components.host = normalizedHost(host)
+        components.host = normalizedHost(components.host ?? host)
         components.fragment = nil
         components.queryItems = components.queryItems?.filter { item in
             let name = item.name.lowercased()
@@ -47,6 +50,29 @@ enum URLCanonicalizer {
         if components.queryItems?.isEmpty == true { components.queryItems = nil }
         guard let canonical = components.url else { throw ResolverError.invalidURL }
         return canonical
+    }
+
+    /// `blog.tumblr.com/post/<id>/<slug>` → `www.tumblr.com/<blog>/<id>`.
+    ///
+    /// Tumblr refuses the per-blog subdomains outright — 403 to any client it does not like —
+    /// while serving the same post from `www.tumblr.com`. The address a person shares is almost
+    /// always the subdomain one, so without this every Tumblr link is a dead end.
+    private static func tumblrCanonicalForm(host: String, path: String) -> URLComponents? {
+        let bare = normalizedHost(host)
+        guard bare.hasSuffix(".tumblr.com"), bare != "www.tumblr.com" else { return nil }
+        let blog = String(bare.dropLast(".tumblr.com".count))
+        guard !blog.isEmpty, blog != "www", blog != "assets", !blog.hasSuffix("media") else { return nil }
+        let segments = path.split(separator: "/").map(String.init)
+        guard let postIndex = segments.firstIndex(of: "post"), segments.index(after: postIndex) < segments.endIndex else {
+            return nil
+        }
+        let identifier = segments[segments.index(after: postIndex)]
+        guard identifier.allSatisfy(\.isNumber), !identifier.isEmpty else { return nil }
+        var rebuilt = URLComponents()
+        rebuilt.scheme = "https"
+        rebuilt.host = "www.tumblr.com"
+        rebuilt.path = "/\(blog)/\(identifier)"
+        return rebuilt
     }
 
     /// `t` is a share tracker almost everywhere, but on YouTube it is the start timestamp.
