@@ -49,7 +49,7 @@ final class ScreenshotFlows: XCTestCase {
         XCTAssertTrue(createCollection.waitForExistence(timeout: 5))
         createCollection.tap()
         let collectionName = app.textFields["Collection name"]
-        XCTAssertTrue(collectionName.waitForExistence(timeout: 5))
+        XCTAssertTrue(collectionName.waitForExistence(timeout: 15), "The new-collection alert never appeared")
         collectionName.tap()
         collectionName.typeText("Weekend ideas")
         app.alerts["New collection"].buttons["New collection"].tap()

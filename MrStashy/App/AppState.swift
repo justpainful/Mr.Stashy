@@ -209,7 +209,7 @@ final class AppState {
 
     /// One generated file per media kind, written to a scratch directory so the Catch review can
     /// point its variants at real `file://` addresses.
-    private struct ScreenshotFile {
+    private struct ScreenshotFile: Sendable {
         let type: MediaType
         let filename: String
         let data: Data
@@ -219,7 +219,11 @@ final class AppState {
         let duration: TimeInterval?
     }
 
-    private static func screenshotMediaFiles() async -> [ScreenshotFile] {
+    /// Deliberately `nonisolated`. `AppState` is `@MainActor`, so a static member of it inherits
+    /// that isolation — which put a 1080x1350 PNG render, a twelve-frame GIF encode, and a video
+    /// encode on the main thread during launch. The app sat unresponsive for over a minute while
+    /// they ran, long enough that the screenshot run's own idle checks timed out.
+    private nonisolated static func screenshotMediaFiles() async -> [ScreenshotFile] {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("StashyFixture", isDirectory: true)
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         var files: [ScreenshotFile] = []
