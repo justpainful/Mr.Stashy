@@ -22,52 +22,39 @@ INTERPOLATED_USE = re.compile(r'L10n\.(?:value|format)\(\s*"([^"\\]*)\\\(')
 
 # Families whose members are enumerated in Swift rather than written out at the call site.
 GENERATED_FAMILIES = {
-    "tab.": ["catch", "library", "queue", "settings"],
     "platform.": [
-        "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick",
-        "threads", "tumblr", "imgur", "youTube", "discord", "directMedia",
+        "tikTok", "youTube", "instagram", "threads", "x", "reddit", "bluesky", "pinterest",
+        "snapchat", "kick", "tumblr", "imgur", "discord", "web",
     ],
-    # The capability paragraphs are keys, resolved from the platform they describe.
-    "support.evidence.": [
-        "tikTok", "instagram", "x", "reddit", "bluesky", "pinterest", "snapchat", "kick",
-        "threads", "tumblr", "imgur", "youTube", "discord", "directMedia", "unverified",
-        "noLiveResult",
+    "source.": [
+        "tikTok", "youTube", "instagram", "threads", "x", "reddit", "bluesky", "pinterest",
+        "snapchat", "kick", "tumblr", "imgur", "discord", "web",
     ],
-    "media.": ["photo", "video", "audio", "gif"],
-    "replica.bar.": ["post", "thread", "video", "pin", "story", "clip"],
-    "source.": ["original", "clean", "watermarked", "unknown"],
-    "support.": ["passing", "limited", "needsCredential", "failing", "blocked", "notShipped"],
-    "catch.stage.": [
-        "checkingLink", "resolvingPlatform", "findingContent", "inspectingVariants", "verifyingQuality",
+    "media.": ["photo", "video", "gif", "audio"],
+    "quality.": ["best", "upTo1080p", "dataSaver"],
+    "stage.": ["queued", "preparing", "downloading", "assembling", "verifying", "savingToPhotos", "done", "failed", "cancelled"],
+    "error.": [
+        key + suffix
+        for key in [
+            "invalidLink", "unsupportedLink", "notFound", "loginRequired", "privateContent", "rateLimited",
+            "blocked", "noMedia", "sourceChanged", "network", "expired", "assemblyFailed", "verificationFailed",
+            "storage", "cancelled",
+        ]
+        for suffix in ["", ".fix"]
     ],
-    "queue.stage.": [
-        "resolving", "analyzing", "downloading", "waiting", "paused", "merging", "verifying",
-        "creatingArchive", "savingToPhotos", "completed", "cancelled", "failed",
-    ],
-    "resolver.error.": [
-        "invalidURL", "unsupportedURL", "contentNotFound", "contentPrivate", "authenticationRequired",
-        "rateLimited", "platformChanged", "mediaMissing", "qualityUnavailable", "expiredMediaURL",
-        "networkFailure", "invalidResponse", "verificationFailure",
-    ],
-    "resolver.recovery.": [
-        "invalidURL", "unsupportedURL", "contentNotFound", "contentPrivate", "authenticationRequired",
-        "rateLimited", "platformChanged", "mediaMissing", "qualityUnavailable", "expiredMediaURL",
-        "networkFailure", "invalidResponse", "verificationFailure",
-    ],
-    "settings.quality.": ["original", "askEveryTime", "dataSaver"],
-    "settings.saveMode.": ["fullPost", "mediaOnly", "askEveryTime"],
-    "settings.appearance.": ["system", "light", "dark"],
-    "settings.theme.": ["studio", "citrus", "ember", "ocean"],
-    "settings.language.": ["system", "english", "arabic"],
-    "library.mode.": ["posts", "media"],
-    "textCard.style.": ["neutral", "compact", "editorial"],
     "credential.": [
-        "imgurClientID", "tumblrAPIKey", "xBearerToken", "pinterestAccessToken",
-        "instagramAccessToken", "threadsAccessToken", "tikTokAccessToken",
-        "imgurClientID.help", "tumblrAPIKey.help", "xBearerToken.help", "pinterestAccessToken.help",
-        "instagramAccessToken.help", "threadsAccessToken.help", "tikTokAccessToken.help",
+        key + suffix
+        for key in ["discordBotToken", "xBearerToken", "imgurClientID", "tumblrAPIKey"]
+        for suffix in ["", ".help"]
     ],
+    "settings.appearance.": ["system", "light", "dark"],
+    "settings.language.": ["system", "english", "arabic"],
 }
+
+# Counted strings resolve through `L10n.plural`, which appends the CLDR category. English
+# needs `one` and `other`; Arabic additionally has zero, two, few and many, which it may use.
+PLURAL_USE = re.compile(r'L10n\.plural\(\s*"([^"]+)"')
+PLURAL_REQUIRED = {"en": ["one", "other"], "ar": ["one", "few", "many", "other"]}
 
 
 def keys_in(language: str) -> set[str]:
@@ -98,9 +85,10 @@ def main() -> int:
     per_language = {language: keys_in(language) for language in LANGUAGES}
 
     base = per_language[LANGUAGES[0]]
+    plural_suffixes = (".zero", ".one", ".two", ".few", ".many", ".other")
     for language in LANGUAGES[1:]:
-        missing = sorted(base - per_language[language])
-        extra = sorted(per_language[language] - base)
+        missing = sorted(key for key in base - per_language[language] if not key.endswith(plural_suffixes))
+        extra = sorted(key for key in per_language[language] - base if not key.endswith(plural_suffixes))
         for key in missing:
             problems.append(f"{language}: missing translation for {key!r}")
         for key in extra:
@@ -108,6 +96,15 @@ def main() -> int:
 
     for key in sorted(used_keys() - base):
         problems.append(f"code uses {key!r} but no localization defines it")
+
+    plural_keys: set[str] = set()
+    for path in swift_sources():
+        plural_keys.update(PLURAL_USE.findall(path.read_text(encoding="utf-8")))
+    for language in LANGUAGES:
+        for key in sorted(plural_keys):
+            for category in PLURAL_REQUIRED[language]:
+                if f"{key}.{category}" not in per_language[language]:
+                    problems.append(f"{language}: plural form {key + '.' + category!r} is not defined")
 
     for family, suffixes in GENERATED_FAMILIES.items():
         for suffix in suffixes:

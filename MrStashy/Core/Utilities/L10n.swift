@@ -11,20 +11,25 @@ enum L10n {
     nonisolated(unsafe) private static var overrideBundle: Bundle?
     nonisolated(unsafe) private static var overrideIdentifier: String?
 
-    static func setLanguage(_ language: UserSettings.AppLanguage) {
+    static func setLanguage(_ language: Settings.Language) {
         lock.lock()
         defer { lock.unlock() }
-        switch language {
-        case .system:
+        guard let identifier = language.localeIdentifier else {
             overrideBundle = nil
             overrideIdentifier = nil
-        case .english:
-            overrideBundle = localizationBundle(for: "en")
-            overrideIdentifier = overrideBundle == nil ? nil : "en"
-        case .arabic:
-            overrideBundle = localizationBundle(for: "ar")
-            overrideIdentifier = overrideBundle == nil ? nil : "ar"
+            return
         }
+        overrideBundle = localizationBundle(for: identifier)
+        overrideIdentifier = overrideBundle == nil ? nil : identifier
+    }
+
+    /// Whether the interface is currently right-to-left, following the in-app choice first.
+    static var isRightToLeft: Bool {
+        lock.lock()
+        let identifier = overrideIdentifier
+        lock.unlock()
+        if let identifier { return identifier == "ar" }
+        return Locale.current.language.characterDirection == .rightToLeft
     }
 
     static func value(_ key: String) -> String {
@@ -56,6 +61,37 @@ enum L10n {
 
     static func format(_ key: String, _ arguments: CVarArg...) -> String {
         String(format: value(key), locale: activeLocale, arguments: arguments)
+    }
+
+    /// Looks up `key.one`, `key.two`, `key.few`… by the active language's plural rules and
+    /// formats the count into it. Arabic has six forms; `String(format:)` alone would show
+    /// "3 items" grammar to an Arabic reader.
+    static func plural(_ key: String, _ count: Int) -> String {
+        let category = pluralCategory(count)
+        let candidates = ["\(key).\(category)", "\(key).other", key]
+        for candidate in candidates {
+            if let found = localizedIfPresent(candidate) {
+                return String(format: found, locale: activeLocale, Int64(count))
+            }
+        }
+        return "\(count)"
+    }
+
+    static func pluralCategory(_ count: Int) -> String {
+        let language = activeLocale.language.languageCode?.identifier ?? "en"
+        if language == "ar" {
+            switch count {
+            case 0: return "zero"
+            case 1: return "one"
+            case 2: return "two"
+            default:
+                let remainder = count % 100
+                if (3 ... 10).contains(remainder) { return "few" }
+                if (11 ... 99).contains(remainder) { return "many" }
+                return "other"
+            }
+        }
+        return count == 1 ? "one" : "other"
     }
 
     static var activeLocale: Locale {

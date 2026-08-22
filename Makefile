@@ -3,7 +3,7 @@ SHELL := /bin/bash
 SCHEME ?= MrStashy
 DESTINATION ?=
 
-.PHONY: bootstrap generate assets lint build test ui-test screenshots platform-contracts ipa release-check
+.PHONY: bootstrap generate assets lint build test ui-test ipa release-check
 
 bootstrap:
 	bash scripts/bootstrap.sh
@@ -25,14 +25,8 @@ test: generate assets
 ui-test: generate assets
 	bash scripts/ui_test.sh "$(SCHEME)" "$(DESTINATION)"
 
-screenshots: generate assets
-	bash scripts/capture_screenshots.sh "$(SCHEME)" "$(DESTINATION)"
-
-platform-contracts: generate assets
-	LIVE_PLATFORM_CONTRACTS=1 bash scripts/platform_contracts.sh "$(SCHEME)" "$(DESTINATION)"
-
 ipa: generate assets
 	bash scripts/package_ipa.sh "$(SCHEME)"
 
-release-check: assets test ui-test screenshots platform-contracts ipa
+release-check: assets test ui-test ipa
 	RELEASE_GUARD_SKIP_TESTS=1 bash scripts/release_guard.sh

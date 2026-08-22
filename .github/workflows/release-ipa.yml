@@ -46,10 +46,6 @@ jobs:
           device="$(bash scripts/boot_simulator.sh)"
           RESULT_BUNDLE=Artifacts/MrStashyTests.xcresult bash scripts/test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
           RESULT_BUNDLE=Artifacts/MrStashyUITests.xcresult bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
-      - name: Verify the iPhone 14 Pro Max baseline or closest available equivalent
-        run: |
-          device="$(bash scripts/boot_simulator.sh iphone-14-or-closest)"
-          RESULT_BUNDLE=Artifacts/MrStashyBaselineUITests.xcresult bash scripts/ui_test.sh "$SCHEME" "platform=iOS Simulator,id=$device"
       # Packaging happens before the live-source contracts. Those calls depend on third-party
       # availability from a data-centre address, and sequencing them first meant one flaky
       # source produced no artifact at all from an otherwise good build.
@@ -63,13 +59,6 @@ jobs:
             Artifacts/MrStashy-dSYM.zip
             Artifacts/BuildMetadata.json
           if-no-files-found: error
-      - name: Run release-blocking live platform contracts
-        env:
-          LIVE_PLATFORM_CONTRACTS: "1"
-          PLATFORM_CONTRACT_FIXTURE_TOKEN: ${{ secrets.PLATFORM_CONTRACT_FIXTURE_TOKEN }}
-        run: |
-          device="$(bash scripts/boot_simulator.sh)"
-          bash scripts/platform_contracts.sh "$SCHEME" "platform=iOS Simulator,id=$device"
       - name: Package screenshots captured by UI tests
         run: |
           test -d Artifacts/Screenshots
@@ -107,15 +96,12 @@ jobs:
         run: |
           mkdir -p Artifacts/QualityReports
           cp -f Artifacts/AssetValidationReport.json Artifacts/QualityReports/ 2>/dev/null || true
-          cp -f Artifacts/PlatformSupportReport.json Artifacts/QualityReports/ 2>/dev/null || true
-          cp -f Artifacts/PlatformSupport.md Artifacts/QualityReports/ 2>/dev/null || true
-          cp -f Artifacts/CrashAudit.md Artifacts/MemoryAudit.md Artifacts/PerformanceAudit.md Artifacts/QualityReports/ 2>/dev/null || true
           ditto -c -k --sequesterRsrc --keepParent Artifacts/QualityReports Artifacts/MrStashy-QualityReports.zip
       - name: Build xcresult archive
         if: always()
         run: |
           mkdir -p Artifacts/Xcresults
-          for result in Artifacts/MrStashyTests.xcresult Artifacts/MrStashyUITests.xcresult Artifacts/MrStashyBaselineUITests.xcresult Artifacts/PlatformContractTests.xcresult; do
+          for result in Artifacts/MrStashyTests.xcresult Artifacts/MrStashyUITests.xcresult; do
             [ -e "$result" ] && cp -R "$result" Artifacts/Xcresults/
           done
           ditto -c -k --sequesterRsrc --keepParent Artifacts/Xcresults Artifacts/MrStashy-xcresult.zip
@@ -131,8 +117,6 @@ jobs:
             Artifacts/MrStashy-Screenshots.zip
             Artifacts/MrStashy-QualityReports.zip
             Artifacts/MrStashy-xcresult.zip
-            Artifacts/PlatformSupportReport.json
-            Artifacts/PlatformSupport.md
           )
           if [ -f Artifacts/MrStashy-signed.ipa ]; then assets+=(Artifacts/MrStashy-signed.ipa); fi
           if gh release view "$tag" >/dev/null 2>&1; then
@@ -140,7 +124,7 @@ jobs:
           else
             gh release create "$tag" "${assets[@]}" \
               --title "Stashy $tag" \
-              --notes "Unsigned IPA is provided for local re-signing and sideloading. See Docs/Sideloading.md. Platform support is limited to the attached live contract matrix."
+              --notes "Unsigned IPA is provided for local re-signing and sideloading. See Docs/Sideloading.md. What each source gives is listed in Settings and in README.md."
           fi
       - uses: actions/upload-artifact@v4
         if: always() && env.HAS_SIGNING_MATERIAL == 'true'

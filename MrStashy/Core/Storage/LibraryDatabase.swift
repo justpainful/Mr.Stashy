@@ -1,182 +1,127 @@
 import Foundation
 import SQLite3
 
-private final class SQLiteConnection: @unchecked Sendable {
-    var handle: OpaquePointer?
+private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+/// A search index over archive summaries. The manifests on disk are the truth; this only
+/// makes the library fast to list and search, and is rebuilt from them when missing.
+final class LibraryDatabase: @unchecked Sendable {
+    private var handle: OpaquePointer?
+    private let lock = NSLock()
+
+    init(at url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            throw StashyError.storage
+        }
+        try execute("PRAGMA journal_mode = WAL;")
+        try execute("""
+        CREATE TABLE IF NOT EXISTS archives (
+            id TEXT PRIMARY KEY NOT NULL,
+            saved_at REAL NOT NULL,
+            platform TEXT NOT NULL,
+            summary BLOB NOT NULL
+        );
+        """)
+        try execute("CREATE INDEX IF NOT EXISTS archives_saved_at ON archives(saved_at DESC);")
+        try execute("CREATE VIRTUAL TABLE IF NOT EXISTS archive_text USING fts5(id UNINDEXED, body);")
+    }
 
     deinit {
         if let handle { sqlite3_close(handle) }
     }
-}
 
-/// Metadata-only SQLite index. Archive manifests and media remain in the file store so a
-/// post can always be reopened without depending on a database blob.
-actor LibraryDatabase {
-    private let connectionBox = SQLiteConnection()
-
-    private var connection: OpaquePointer? { connectionBox.handle }
-
-    func migrate(at databaseURL: URL) throws {
-        if connection == nil {
-            try FileManager.default.createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard sqlite3_open_v2(databaseURL.path, &connectionBox.handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
-                throw LibraryDatabaseError.openFailed(message: errorMessage)
-            }
-            try execute("PRAGMA foreign_keys = ON;")
-            try execute("PRAGMA journal_mode = WAL;")
-        }
-
-        try execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);")
-        let applied = try appliedVersions()
-        if !applied.contains(1) {
-            try execute("""
-            CREATE TABLE archives (
-                archive_id TEXT PRIMARY KEY NOT NULL,
-                saved_at REAL NOT NULL,
-                platform TEXT NOT NULL,
-                author TEXT NOT NULL,
-                summary_json BLOB NOT NULL
-            );
-            """)
-            try execute("CREATE INDEX archives_saved_at ON archives(saved_at DESC);")
-            try execute("INSERT INTO schema_migrations(version) VALUES (1);")
-        }
-        if !applied.contains(2) {
-            try execute("CREATE VIRTUAL TABLE archive_search USING fts5(archive_id UNINDEXED, author, text);")
-            try execute("INSERT INTO schema_migrations(version) VALUES (2);")
-        }
-    }
-
-    func upsert(_ summary: ArchivedPostSummary) throws {
+    func upsert(_ summary: ArchiveSummary) throws {
         let data = try JSONEncoder.stashy.encode(summary)
-        try withStatement("""
-        INSERT INTO archives(archive_id, saved_at, platform, author, summary_json)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(archive_id) DO UPDATE SET
-            saved_at = excluded.saved_at,
-            platform = excluded.platform,
-            author = excluded.author,
-            summary_json = excluded.summary_json;
-        """) { statement in
-            bind(summary.id.uuidString, to: 1, statement: statement)
-            sqlite3_bind_double(statement, 2, summary.savedAt.timeIntervalSinceReferenceDate)
-            bind(summary.platform.rawValue, to: 3, statement: statement)
-            bind(summary.author, to: 4, statement: statement)
-            let result: Int32 = data.withUnsafeBytes { bytes in
-                sqlite3_bind_blob(statement, 5, bytes.baseAddress, Int32(data.count), sqliteTransient)
+        try locked {
+            try statement("INSERT OR REPLACE INTO archives(id, saved_at, platform, summary) VALUES (?, ?, ?, ?);") { statement in
+                sqlite3_bind_text(statement, 1, summary.id.uuidString, -1, sqliteTransient)
+                sqlite3_bind_double(statement, 2, summary.savedAt.timeIntervalSinceReferenceDate)
+                sqlite3_bind_text(statement, 3, summary.platform.rawValue, -1, sqliteTransient)
+                _ = data.withUnsafeBytes { sqlite3_bind_blob(statement, 4, $0.baseAddress, Int32(data.count), sqliteTransient) }
+                try step(statement)
             }
-            guard result == SQLITE_OK else {
-                throw LibraryDatabaseError.statementFailed(message: errorMessage)
+            try statement("DELETE FROM archive_text WHERE id = ?;") { statement in
+                sqlite3_bind_text(statement, 1, summary.id.uuidString, -1, sqliteTransient)
+                try step(statement)
             }
-            try step(statement)
-        }
-        try updateSearchIndex(summary)
-    }
-
-    func summaries(matching query: String? = nil) throws -> [ArchivedPostSummary] {
-        let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let sql: String
-        if trimmed.isEmpty {
-            sql = "SELECT summary_json FROM archives ORDER BY saved_at DESC;"
-        } else {
-            sql = """
-            SELECT archives.summary_json FROM archive_search
-            INNER JOIN archives ON archives.archive_id = archive_search.archive_id
-            WHERE archive_search MATCH ?
-            ORDER BY archives.saved_at DESC;
-            """
-        }
-        return try withStatement(sql) { statement in
-            if !trimmed.isEmpty { bind(ftsQuery(trimmed), to: 1, statement: statement) }
-            var result: [ArchivedPostSummary] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                guard let bytes = sqlite3_column_blob(statement, 0) else { continue }
-                let length = Int(sqlite3_column_bytes(statement, 0))
-                result.append(try JSONDecoder.stashy.decode(ArchivedPostSummary.self, from: Data(bytes: bytes, count: length)))
+            let body = [summary.authorName, summary.authorHandle ?? "", summary.title ?? "", summary.text, summary.platform.rawValue].joined(separator: " ")
+            try statement("INSERT INTO archive_text(id, body) VALUES (?, ?);") { statement in
+                sqlite3_bind_text(statement, 1, summary.id.uuidString, -1, sqliteTransient)
+                sqlite3_bind_text(statement, 2, body, -1, sqliteTransient)
+                try step(statement)
             }
-            return result
         }
     }
 
-    func remove(archiveID: UUID) throws {
-        try withStatement("DELETE FROM archive_search WHERE archive_id = ?;") { statement in
-            bind(archiveID.uuidString, to: 1, statement: statement)
-            try step(statement)
-        }
-        try withStatement("DELETE FROM archives WHERE archive_id = ?;") { statement in
-            bind(archiveID.uuidString, to: 1, statement: statement)
-            try step(statement)
-        }
-    }
-
-    private func updateSearchIndex(_ summary: ArchivedPostSummary) throws {
-        try withStatement("DELETE FROM archive_search WHERE archive_id = ?;") { statement in
-            bind(summary.id.uuidString, to: 1, statement: statement)
-            try step(statement)
-        }
-        try withStatement("INSERT INTO archive_search(archive_id, author, text) VALUES (?, ?, ?);") { statement in
-            bind(summary.id.uuidString, to: 1, statement: statement)
-            bind(summary.author, to: 2, statement: statement)
-            bind("\(summary.platform.rawValue) \(summary.text)", to: 3, statement: statement)
-            try step(statement)
+    func remove(_ id: UUID) throws {
+        try locked {
+            for sql in ["DELETE FROM archive_text WHERE id = ?;", "DELETE FROM archives WHERE id = ?;"] {
+                try statement(sql) { statement in
+                    sqlite3_bind_text(statement, 1, id.uuidString, -1, sqliteTransient)
+                    try step(statement)
+                }
+            }
         }
     }
 
-    private func appliedVersions() throws -> Set<Int> {
-        try withStatement("SELECT version FROM schema_migrations;") { statement in
-            var versions = Set<Int>()
-            while sqlite3_step(statement) == SQLITE_ROW { versions.insert(Int(sqlite3_column_int(statement, 0))) }
-            return versions
+    func all() throws -> [ArchiveSummary] {
+        try locked {
+            try statement("SELECT summary FROM archives ORDER BY saved_at DESC;") { statement in
+                try read(statement)
+            }
         }
+    }
+
+    func search(_ query: String) throws -> [ArchiveSummary] {
+        let terms = query.split(whereSeparator: \.isWhitespace).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
+        guard !terms.isEmpty else { return try all() }
+        return try locked {
+            try statement("SELECT archives.summary FROM archive_text JOIN archives ON archives.id = archive_text.id WHERE archive_text MATCH ? ORDER BY archives.saved_at DESC;") { statement in
+                sqlite3_bind_text(statement, 1, terms.joined(separator: " AND "), -1, sqliteTransient)
+                return try read(statement)
+            }
+        }
+    }
+
+    func count() -> Int {
+        (try? locked {
+            try statement("SELECT COUNT(*) FROM archives;") { statement in
+                sqlite3_step(statement) == SQLITE_ROW ? Int(sqlite3_column_int(statement, 0)) : 0
+            }
+        }) ?? 0
+    }
+
+    // MARK: Plumbing
+
+    private func read(_ statement: OpaquePointer) throws -> [ArchiveSummary] {
+        var rows: [ArchiveSummary] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let bytes = sqlite3_column_blob(statement, 0) else { continue }
+            let length = Int(sqlite3_column_bytes(statement, 0))
+            if let summary = try? JSONDecoder.stashy.decode(ArchiveSummary.self, from: Data(bytes: bytes, count: length)) { rows.append(summary) }
+        }
+        return rows
+    }
+
+    private func locked<T>(_ body: () throws -> T) throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try body()
     }
 
     private func execute(_ sql: String) throws {
-        var error: UnsafeMutablePointer<CChar>?
-        guard sqlite3_exec(connection, sql, nil, nil, &error) == SQLITE_OK else {
-            defer { sqlite3_free(error) }
-            throw LibraryDatabaseError.statementFailed(message: error.map { String(cString: $0) } ?? errorMessage)
-        }
+        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw StashyError.storage }
     }
 
-    private func withStatement<T>(_ sql: String, _ body: (OpaquePointer) throws -> T) throws -> T {
+    private func statement<T>(_ sql: String, _ body: (OpaquePointer) throws -> T) throws -> T {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw LibraryDatabaseError.statementFailed(message: errorMessage)
-        }
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw StashyError.storage }
         defer { sqlite3_finalize(statement) }
         return try body(statement)
     }
 
     private func step(_ statement: OpaquePointer) throws {
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw LibraryDatabaseError.statementFailed(message: errorMessage)
-        }
-    }
-
-    private func bind(_ value: String, to index: Int32, statement: OpaquePointer) {
-        sqlite3_bind_text(statement, index, value, -1, sqliteTransient)
-    }
-
-    private func ftsQuery(_ input: String) -> String {
-        input.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"" }.joined(separator: " AND ")
-    }
-
-    private var errorMessage: String {
-        guard let connection, let message = sqlite3_errmsg(connection) else { return L10n.value("library.database.unknownError") }
-        return String(cString: message)
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw StashyError.storage }
     }
 }
-
-enum LibraryDatabaseError: LocalizedError {
-    case openFailed(message: String)
-    case statementFailed(message: String)
-
-    var errorDescription: String? {
-        switch self {
-        case .openFailed(let message): L10n.format("library.database.openFailed", message)
-        case .statementFailed(let message): L10n.format("library.database.statementFailed", message)
-        }
-    }
-}
-
-private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
