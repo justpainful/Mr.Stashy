@@ -166,12 +166,13 @@ struct MediaAssembler: Sendable {
 
     private static func decryptAES128(_ data: Data, key: Data, iv: Data) throws -> Data {
         var output = Data(count: data.count + kCCBlockSizeAES128)
+        let capacity = output.count
         var written = 0
         let status = output.withUnsafeMutableBytes { outputBytes in
             data.withUnsafeBytes { inputBytes in
                 key.withUnsafeBytes { keyBytes in
                     iv.withUnsafeBytes { ivBytes in
-                        CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding), keyBytes.baseAddress, key.count, ivBytes.baseAddress, inputBytes.baseAddress, data.count, outputBytes.baseAddress, output.count, &written)
+                        CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding), keyBytes.baseAddress, key.count, ivBytes.baseAddress, inputBytes.baseAddress, data.count, outputBytes.baseAddress, capacity, &written)
                     }
                 }
             }

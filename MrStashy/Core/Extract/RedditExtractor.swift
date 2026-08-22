@@ -35,7 +35,10 @@ struct RedditExtractor: Extractor {
         if items.isEmpty, let linked = data["url_overridden_by_dest"].url ?? data["url"].url {
             let linkedPlatform = LinkParser.platform(for: linked)
             if LinkParser.isDirectMedia(linked) {
-                items = [Extract.item(linked.pathExtension.lowercased() == "gif" ? .gif : (["mp4", "mov", "webm"].contains(linked.pathExtension.lowercased()) ? .video : .photo), [Extract.photo(linked, label: "link")])]
+                let ext = linked.pathExtension.lowercased()
+                let kind: MediaKind = ext == "gif" ? .gif : (["mp4", "mov", "webm"].contains(ext) ? .video : .photo)
+                let variant = kind == .video ? Extract.video(linked, codec: nil, container: ext, label: "link") : Extract.photo(linked, label: "link")
+                items = [Extract.item(kind, [variant])]
             } else if linkedPlatform != .reddit && linkedPlatform != .web, let extractor = ExtractorRegistry.all[linkedPlatform] {
                 let linkedPost = try await extractor.extract(linked, client: client, credentials: credentials)
                 items = linkedPost.items
