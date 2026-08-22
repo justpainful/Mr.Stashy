@@ -10,13 +10,11 @@ Tuist is pinned to 4.64.1 in both `.tuist-version` and `.tool-versions`; `jdx/mi
 
 | Workflow | Purpose |
 | --- | --- |
-| `ci.yml` | Assets, format/lint, bootstrap, tests, simulator build, unsigned Release build, and a static release guard that intentionally leaves live contracts to their dedicated workflow |
-| `platform-contracts.yml` | Nightly/manual public resolver contracts with redacted evidence artifacts |
-| `screenshots.yml` | Manual/release-candidate visual flow capture and screenshot ZIP artifact |
-| `release-ipa.yml` | `v*-sideload` tag/manual end-to-end release gate, live contracts, screenshots, unsigned IPA, dSYMs, quality reports, and the GitHub Release only after every gate passes |
+| `ci.yml` | Assets, format/lint, bootstrap, tests, simulator build, unsigned Release build, and a release guard that checks the IPA, the screenshot set and the source-policy lint |
+| `release-ipa.yml` | `v*-sideload` tag/manual end-to-end release gate: tests, screenshots, unsigned IPA, dSYMs, and the GitHub Release only after every gate passes |
 
 PR CI starts project generation, tests, UI tests, and unsigned packaging immediately; the standalone simulator build follows the project-generation check. The final Ubuntu guard reuses the IPA and screenshot artifacts instead of rebuilding them. Workflow concurrency cancels obsolete runs after a newer commit is pushed.
 
-The release workflow fails closed. It does not publish merely because an archive was built: all contract evidence, audits, screenshot files, alpha validation, tests, and package checks must pass.
+The release workflow fails closed. It does not publish merely because an archive was built: the tests, the screenshot set, asset and localization validation, and the package checks must pass.
 
 The release flow tests the latest available Pro Max simulator and separately selects `iPhone 14 Pro Max` when the runner provides it; otherwise it uses the closest available Pro Max equivalent. The exact UDIDs are discovered by `scripts/boot_simulator.sh`, not guessed in YAML.
