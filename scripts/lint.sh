@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/source_search.sh"
 
 paths=()
-for path in MrStashy MrStashyTests MrStashyUITests PlatformContractTests ShareExtension Shared; do
+for path in MrStashy MrStashyTests MrStashyUITests ShareExtension Shared; do
   [[ -d "$path" ]] && paths+=("$path")
 done
 (( ${#paths[@]} > 0 )) || { echo "No Swift source directories found." >&2; exit 1; }

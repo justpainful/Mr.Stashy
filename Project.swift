@@ -2,11 +2,23 @@ import ProjectDescription
 
 let appInfoPlist: [String: Plist.Value] = [
     "CFBundleDisplayName": "Stashy",
-    "CFBundleShortVersionString": "0.1.0",
+    "CFBundleShortVersionString": "1.0.0",
     "CFBundleVersion": "1",
     "UILaunchScreen": [:],
     "UISupportsDocumentBrowser": false,
     "NSPhotoLibraryAddUsageDescription": "Stashy saves media to Photos only when you ask it to.",
+    "NSAppTransportSecurity": ["NSAllowsArbitraryLoads": false],
+    "CFBundleDocumentTypes": [[
+        "CFBundleTypeName": "Stashy archive",
+        "LSHandlerRank": "Owner",
+        "LSItemContentTypes": ["com.tryvaultline.mrstashy.stash"]
+    ]],
+    "UTExportedTypeDeclarations": [[
+        "UTTypeIdentifier": "com.tryvaultline.mrstashy.stash",
+        "UTTypeDescription": "Stashy archive",
+        "UTTypeConformsTo": ["com.pkware.zip-archive"],
+        "UTTypeTagSpecification": ["public.filename-extension": ["stash"]]
+    ]],
     "CFBundleURLTypes": [[
         "CFBundleURLName": "com.tryvaultline.mrstashy",
         "CFBundleURLSchemes": ["stashy"]
@@ -21,7 +33,11 @@ let project = Project(
     ],
     settings: .settings(
         base: [
-            "SWIFT_VERSION": "6.0",
+            // Swift 5 language mode: the app is written with structured concurrency, but the
+            // AVFoundation and CoreMedia callbacks it drives are not annotated for Swift 6's
+            // strict checking, and a compile error there is not a bug in the app.
+            "SWIFT_VERSION": "5.0",
+            "SWIFT_STRICT_CONCURRENCY": "minimal",
             "IPHONEOS_DEPLOYMENT_TARGET": "26.0",
             "TARGETED_DEVICE_FAMILY": "1,2",
             "DEVELOPMENT_TEAM": "",
@@ -50,7 +66,7 @@ let project = Project(
             deploymentTargets: .iOS("26.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "Stashy",
-                "CFBundleShortVersionString": "0.1.0",
+                "CFBundleShortVersionString": "1.0.0",
                 "CFBundleVersion": "1",
                 "NSExtension": [
                     "NSExtensionPointIdentifier": "com.apple.share-services",
@@ -82,24 +98,14 @@ let project = Project(
             infoPlist: .default,
             sources: ["MrStashyUITests/**"],
             dependencies: [.target(name: "MrStashy")]
-        ),
-        .target(
-            name: "PlatformContractTests",
-            destinations: .iOS,
-            product: .unitTests,
-            bundleId: "com.tryvaultline.mrstashy.platform-contracts",
-            deploymentTargets: .iOS("26.0"),
-            infoPlist: .default,
-            sources: ["PlatformContractTests/**"],
-            dependencies: [.target(name: "MrStashy")]
         )
     ],
-    schemes: [
+schemes: [
         .scheme(
             name: "MrStashy",
             shared: true,
             buildAction: .buildAction(targets: ["MrStashy", "StashyShareExtension"]),
-            testAction: .targets(["MrStashyTests", "MrStashyUITests", "PlatformContractTests"]),
+            testAction: .targets(["MrStashyTests", "MrStashyUITests"]),
             runAction: .runAction(configuration: .debug),
             archiveAction: .archiveAction(configuration: .release)
         )

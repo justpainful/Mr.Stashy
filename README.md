@@ -1,99 +1,62 @@
-<div align="center">
+# Stashy
 
-# Mr. Stashy
+**Catch it. Keep it.** Stashy is an iPhone app that takes a public post link and stores the
+post on the phone: its text, author, every picture at full size, and the video at the highest
+quality the source actually serves. No account, no server, no analytics. Arabic and English.
 
-A local-first iOS archive for public posts and media.
+## What each source gives
 
-</div>
+| Source | What is saved | How |
+|---|---|---|
+| YouTube | Video with sound up to 4K (H.264 to 1080p everywhere; 1440p/4K as AV1 on iPhone 15 Pro or newer), plus the cover | The player response YouTube serves its own iOS app lists direct stream addresses; video and audio streams are muxed on the device |
+| TikTok | Video without watermark at the highest bitrate listed (up to 1080p), photo posts at full size | Post page state → embed player item endpoint → embed page, in that order |
+| Instagram | Public posts, reels, carousels: pictures at full size and the video file | Web GraphQL post query → embed page → link-preview metadata |
+| Threads | Public posts: pictures and video | Data inlined in the post/embed page |
+| X | Photos at original size, video at the highest MP4 rendition | The embedded-tweet endpoint; a personal API bearer token also reaches age-gated posts |
+| Reddit | Images, galleries, GIFs, v.redd.it video **with sound** | `.json` listing + DASH manifest; video and audio tracks are muxed on the device |
+| Bluesky | The **original uploaded file** (video or image) | The post record names the blob; it is fetched from the author's own PDS, with the CDN rendition as fallback |
+| Pinterest | Original image, every MP4 rendition of a video pin, idea-pin pages | Widget endpoint, then the pin page |
+| Snapchat | Spotlight videos and public stories as MP4 | The page's Next.js payload |
+| Kick | Clips and past broadcasts as one MP4 | HLS segments are downloaded and the MPEG-TS is rewritten into MP4 on the device, without re-encoding |
+| Tumblr | Every picture block, Tumblr-hosted video and audio | The post page's inlined NPF blocks; optional personal API key |
+| Imgur | Images, albums, videos at original size | Imgur's post endpoint |
+| Discord | Attachments of a message a bot you own can read | Bot token only; user tokens are refused |
+| Any page / file | Direct media links; a page's published video, pictures, metadata | Open Graph, `<video>`, JSON-LD |
 
-## Overview
+Every file is verified after download (real media bytes, not an error page), hashed with
+SHA-256, and recorded in a `manifest.json` next to it. The interface shows a "spec line" for
+each file — resolution · codec · size — so what was saved is never a guess.
 
-Mr. Stashy saves public content to the device with the context needed to make the archive useful later. A saved item can include post text, attribution, ordered media and source metadata.
+## How it is built
 
-The app has no Stashy account or hosted library. Saved content stays local unless the user exports it.
+- `MrStashy/Core/Extract` — one extractor per source, all reading only what the source
+  publishes to a signed-out reader (or to a developer key the person added themselves).
+- `MrStashy/Core/Download` — ranged downloads, HLS stitching, an MPEG-TS → MP4 remuxer,
+  AVFoundation muxing of separate video/audio streams, file verification.
+- `MrStashy/Core/Storage` — archive folders, a SQLite/FTS index, `.stash` export/import,
+  Keychain for keys.
+- `MrStashy/UI` — SwiftUI: Catch, Library, Queue, Settings. Design decisions are in
+  `Docs/DESIGN.md`.
 
-## Features
-
-- Save from a pasted URL or Share Sheet
-- Archive a full post, selected media or a text card
-- Local searchable library
-- Offline access after a successful save
-- `.stash` import and export
-- Arabic and English localization
-- Native RTL support
-- Per-platform capability reporting
-- Optional user supplied developer keys for supported sources
-
-## How sources are handled
-
-Mr. Stashy reads information made available to public readers such as page metadata, documented embed endpoints and media references published by the page itself.
-
-The app does not sign in to a user's social account or reuse personal sessions. Sources that require authentication are reported as unavailable unless a supported developer key has been provided by the user.
-
-Media candidates are validated before they are added to an archive. Partial captures are recorded as partial instead of presenting a preview image as if the original media file had been saved.
-
-## Platform support
-
-Source capabilities are defined in:
-
-```text
-MrStashy/Core/Models/PlatformCapability.swift
-```
-
-The same capability model drives the Catch screen and the support status shown in Settings.
-
-Live source checks can be run with:
-
-```bash
-LIVE_PLATFORM_CONTRACTS=1 make platform-contracts
-```
-
-Generated evidence is written to `Artifacts/PlatformSupport.md`.
-
-## Requirements
-
-- macOS 26
-- Xcode 26.5
-- iOS 26.5 Simulator runtime
-- Tuist 4.64.1
-- Python 3 for development validation scripts
-
-## Build and test
+Requirements: Xcode 26.5, Tuist 4.64.1 (pinned), iOS 26. Builds and tests run on GitHub
+Actions (`ci.yml`); `sideload-ipa.yml` produces an unsigned IPA for re-signing.
 
 ```bash
 make bootstrap
-make build
 make test
 make ui-test
-make screenshots
-make ipa
-make release-check
-```
-
-The release checks cover source policy, assets, localization, tests, screenshots, support evidence and IPA packaging.
-
-## Sideload build
-
-```bash
 make ipa
 ```
 
-This creates:
+`scripts/verify_localization.py` fails the build when a key used in code is missing in either
+language, including the Arabic plural forms.
 
-```text
-Artifacts/MrStashy-unsigned.ipa
-```
+## Boundaries
 
-The IPA is unsigned and can be re-signed by the device owner with a compatible sideloading tool.
+Stashy signs in to nothing, replays no stored session, bypasses no paywall or DRM, and never
+removes a burned-in watermark. A source that needs a login says so. Keys a person adds live in
+the Keychain and never leave the phone. See `Docs/Privacy.md`.
 
-## Documentation
+## Licence
 
-- [`Docs/Privacy.md`](Docs/Privacy.md)
-- [`Docs/StorageFormat.md`](Docs/StorageFormat.md)
-- [`Docs/ResolverArchitecture.md`](Docs/ResolverArchitecture.md)
-- [`Docs/Sideloading.md`](Docs/Sideloading.md)
-- [`Docs/CI.md`](Docs/CI.md)
-
-## Privacy
-
-Source access keys are stored in the device Keychain. They are not written to archives, logs, diagnostics or repository configuration.
+Proprietary; see `LICENSE`.

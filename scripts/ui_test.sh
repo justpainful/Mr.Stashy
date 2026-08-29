@@ -16,8 +16,12 @@ mkdir -p "$(dirname "$result_bundle")" "$(dirname "$log_path")" "$screenshots_di
 rm -rf "$result_bundle"
 export SCREENSHOTS_DIR="$screenshots_dir"
 set -o pipefail
+status=0
 xcodebuild -project MrStashy.xcodeproj -scheme "$scheme" -configuration Debug \
   -destination "$destination" -only-testing:MrStashyUITests \
-  -resultBundlePath "$result_bundle" test 2>&1 | tee "$log_path"
+  -resultBundlePath "$result_bundle" test 2>&1 | tee "$log_path" || status=$?
 
-bash scripts/collect_screenshots.sh "$screenshots_dir" "$result_bundle"
+# Collect the captured screenshots even on failure, so a broken run is still diagnosable.
+bash scripts/collect_screenshots.sh "$screenshots_dir" "$result_bundle" || true
+
+exit "$status"

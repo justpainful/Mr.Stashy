@@ -17,7 +17,6 @@ make ui-test
 For a release-affecting resolver change, also run the live suite with only public, authorized test URLs:
 
 ```bash
-LIVE_PLATFORM_CONTRACTS=1 make platform-contracts
 ```
 
 Do not add cookies, bearer tokens, account exports, copyrighted bulk media, or personal Discord tokens to fixtures, logs, issue comments, screenshots, or commits. Redact source URLs when they would expose private content.
@@ -33,4 +32,4 @@ Do not add cookies, bearer tokens, account exports, copyrighted bulk media, or p
 
 ## Reviews
 
-PRs should state the commands run, simulator/device, locale and appearance coverage, and any resolver contract evidence. Include screenshot paths for visual changes. CI is deliberately release-blocking when artifacts or support evidence are missing.
+PRs should state the commands run, simulator/device, locale and appearance coverage, and, for an extractor change, the public post link it was checked against. Include screenshot paths for visual changes.

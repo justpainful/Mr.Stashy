@@ -177,7 +177,7 @@ jobs:
           if-no-files-found: warn
 
   release-guard:
-    name: Release guard (live contracts intentionally separate)
+    name: Release guard
     needs:
       [asset-validation, unit-and-integration-tests, ui-tests, release-build]
     runs-on: ubuntu-24.04
@@ -199,7 +199,7 @@ jobs:
           name: unsigned-release-build
           path: Artifacts
       - name: Run release guard without live platform calls
-        run: RELEASE_GUARD_SKIP_LIVE_CONTRACTS=1 RELEASE_GUARD_SKIP_TESTS=1 RELEASE_GUARD_SKIP_RUNTIME_AUDITS=1 bash scripts/release_guard.sh
+        run: RELEASE_GUARD_SKIP_TESTS=1 bash scripts/release_guard.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -5,9 +5,8 @@ set -euo pipefail
 screenshots_dir="${1:-Artifacts/Screenshots}"
 result_bundle="${2:-Artifacts/MrStashyUITests.xcresult}"
 required=(
-  onboarding.png catch-empty.png results-mixed-media.png queue.png library-posts.png
-  library-media.png living-post.png text-card-composer.png settings.png discord-disabled.png
-  ar-catch.png ar-library.png dark-catch.png dark-library.png
+  onboarding.png catch-empty.png catch-preview.png catch-preview-options.png queue.png library.png
+  archive-detail.png settings.png sources.png ar-catch-preview.png ar-library.png ar-settings.png
 )
 
 mkdir -p "$screenshots_dir"
