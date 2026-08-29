@@ -22,13 +22,12 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture"])
-        // The Save button sits below the fold, where a SwiftUI ScrollView does not reliably
-        // expose it to XCUITest, so wait on the first item row, which is on screen.
-        XCTAssertTrue(app.buttons["catch.item.0"].waitForExistence(timeout: 30), "The fixture post never appeared on the Catch screen")
+        // Wait on visible static text from the preview header: XCUITest matches SwiftUI static
+        // text reliably, where it does not always expose buttons deep in a ScrollView.
+        XCTAssertTrue(app.staticTexts["Rick Astley"].waitForExistence(timeout: 30), "The fixture post never appeared on the Catch screen")
         capture(app, "catch-preview.png")
         app.swipeUp()
-        // The Save button is reachable once the options scroll into view.
-        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 5), "The Save button never appeared")
+        XCTAssertTrue(app.staticTexts["Quality"].waitForExistence(timeout: 5), "The save options never appeared")
         capture(app, "catch-preview-options.png")
 
         openTab(app, "tab.queue")
@@ -53,7 +52,7 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture", "--arabic"])
-        XCTAssertTrue(app.buttons["catch.item.0"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Rick Astley"].waitForExistence(timeout: 30))
         capture(app, "ar-catch-preview.png")
         openTab(app, "tab.library")
         XCTAssertTrue(firstArchiveTile(app).waitForExistence(timeout: 10))
