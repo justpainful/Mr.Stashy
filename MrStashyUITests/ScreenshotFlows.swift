@@ -22,12 +22,13 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture"])
-        // Capture whatever the fixture launch renders, before asserting, so a failure is visible.
-        _ = app.buttons["catch.saveButton"].waitForExistence(timeout: 30)
-        capture(app, "diag-fixture-launch.png")
-        XCTAssertTrue(app.buttons["catch.saveButton"].exists, "The fixture post never appeared on the Catch screen")
+        // The Save button sits below the fold, where a SwiftUI ScrollView does not reliably
+        // expose it to XCUITest, so wait on the first item row, which is on screen.
+        XCTAssertTrue(app.buttons["catch.item.0"].waitForExistence(timeout: 30), "The fixture post never appeared on the Catch screen")
         capture(app, "catch-preview.png")
         app.swipeUp()
+        // The Save button is reachable once the options scroll into view.
+        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 5), "The Save button never appeared")
         capture(app, "catch-preview-options.png")
 
         openTab(app, "tab.queue")
@@ -52,7 +53,7 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture", "--arabic"])
-        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["catch.item.0"].waitForExistence(timeout: 30))
         capture(app, "ar-catch-preview.png")
         openTab(app, "tab.library")
         XCTAssertTrue(firstArchiveTile(app).waitForExistence(timeout: 10))

@@ -143,9 +143,12 @@ struct ArchiveTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topLeading) {
-                cover
-                    .aspectRatio(1, contentMode: .fill)
-                    .frame(width: width)
+                // A square that fits the grid cell (or the fixed strip width) exactly and clips
+                // the cover to it — without this the fill-scaled image overflows and tiles overlap.
+                Color.clear
+                    .frame(width: width, height: width)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay { cover }
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 HStack(spacing: 4) {
                     PlatformGlyph(platform: summary.platform, size: 22)

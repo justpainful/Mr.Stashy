@@ -5,7 +5,7 @@ set -euo pipefail
 screenshots_dir="${1:-Artifacts/Screenshots}"
 result_bundle="${2:-Artifacts/MrStashyUITests.xcresult}"
 required=(
-  diag-fixture-launch.png onboarding.png catch-empty.png catch-preview.png catch-preview-options.png queue.png library.png
+  onboarding.png catch-empty.png catch-preview.png catch-preview-options.png queue.png library.png
   archive-detail.png settings.png sources.png ar-catch-preview.png ar-library.png ar-settings.png
 )
 
