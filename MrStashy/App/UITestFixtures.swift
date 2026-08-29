@@ -20,14 +20,34 @@ enum UITestFixtures {
         let workspace = FileManager.default.temporaryDirectory.appendingPathComponent("fixture-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
 
-        let video = workspace.appendingPathComponent("clip.mp4")
-        let hasVideo = await SyntheticMedia.videoMP4(to: video, width: 1280, height: 720, seconds: 4)
+        // Pictures are cheap to write, so the preview and queue can be photographed at once.
         let photo = workspace.appendingPathComponent("photo.png")
         try? SyntheticMedia.photoPNG(width: 1080, height: 1350, seed: 0)?.write(to: photo)
         let second = workspace.appendingPathComponent("photo2.png")
         try? SyntheticMedia.photoPNG(width: 1080, height: 1080, seed: 2)?.write(to: second)
         let gif = workspace.appendingPathComponent("loop.gif")
         try? SyntheticMedia.animatedGIF()?.write(to: gif)
+
+        // A resolved post, ready to save, so the preview screen has its spec lines and its
+        // Save button immediately — before the slower video encode below runs.
+        let items = [
+            MediaItem(index: 0, kind: .video, variants: [
+                MediaVariant(delivery: .muxed(video: photo, audio: photo), width: 1920, height: 1080, bitrate: 4_300_000, codec: "H.264", container: "mp4", sizeBytes: 81_000_000, label: "1080p"),
+                MediaVariant(delivery: .file(photo), width: 1280, height: 720, bitrate: 1_100_000, codec: "H.264", container: "mp4", sizeBytes: 26_000_000, label: "720p")
+            ], thumbnailURL: photo, duration: 213),
+            MediaItem(index: 1, kind: .photo, variants: [MediaVariant(delivery: .file(second), width: 1080, height: 1080, codec: "JPEG", container: "jpg", sizeBytes: 140_000, label: "cover")], thumbnailURL: second)
+        ]
+        let post = Post(platform: .youTube, sourceURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!, canonicalURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!, author: Author(name: "Rick Astley", handle: nil), title: "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)", text: "The official video for “Never Gonna Give You Up” by Rick Astley.", createdAt: Date(timeIntervalSince1970: 1_256_428_800), items: items, notes: [], extractor: "fixture")
+        model.linkInput = post.sourceURL.absoluteString
+        model.catchState = .ready(post)
+        model.jobs = [
+            SaveJob(request: SaveRequest(post: post, selectedItemIDs: Set(items.map(\.id)), quality: .best, saveToPhotos: false), stage: .downloading, progress: 0.42, bytesReceived: 34_000_000, bytesExpected: 81_140_000, bytesPerSecond: 2_400_000, currentItem: 0),
+            SaveJob(request: SaveRequest(post: post, selectedItemIDs: Set(items.map(\.id)), quality: .best, saveToPhotos: false), stage: .done, progress: 1, bytesReceived: 81_140_000, bytesExpected: 81_140_000, savedCount: 2)
+        ]
+
+        // Now the slower part: a real short clip, then three committed archives for the library.
+        let video = workspace.appendingPathComponent("clip.mp4")
+        let hasVideo = await SyntheticMedia.videoMP4(to: video, width: 640, height: 360, seconds: 2)
 
         let fixtures: [(Platform, String, String?, String, [(URL, MediaKind)])] = [
             (.tikTok, "Scout, Suki & Stella", "scout2015", "Scramble up ur name & I'll try to guess it 🐾 #petsoftiktok", hasVideo ? [(video, .video)] : [(photo, .photo)]),
@@ -44,7 +64,7 @@ enum UITestFixtures {
                 let size = (try? FileManager.default.attributesOfItem(atPath: copy.path)[.size] as? NSNumber)?.int64Value ?? 0
                 let digest = (try? FileVerifier.sha256(of: copy)) ?? ""
                 let filename = String(format: "%02d-%@.%@", order + 1, media.1.rawValue, copy.pathExtension)
-                files.append(ArchivedFile(id: UUID(), index: order, kind: media.1, filename: filename, sizeBytes: size, sha256: digest, width: nil, height: nil, duration: media.1 == .video ? 4 : nil, codec: media.1 == .video ? "H.264" : "PNG", label: "fixture", altText: nil, sourceURL: URL(string: "https://example.com/\(index)/\(order)")!))
+                files.append(ArchivedFile(id: UUID(), index: order, kind: media.1, filename: filename, sizeBytes: size, sha256: digest, width: nil, height: nil, duration: media.1 == .video ? 2 : nil, codec: media.1 == .video ? "H.264" : "PNG", label: "fixture", altText: nil, sourceURL: URL(string: "https://example.com/\(index)/\(order)")!))
                 staged.append((copy, filename))
             }
             let manifest = ArchiveManifest(
@@ -55,22 +75,9 @@ enum UITestFixtures {
             _ = try? await model.store.commit(manifest: manifest, files: staged)
         }
         await model.refreshLibrary()
-
-        // A resolved post, ready to save, so the preview screen can be photographed.
-        let items = [
-            MediaItem(index: 0, kind: .video, variants: [
-                MediaVariant(delivery: .muxed(video: video, audio: video), width: 1920, height: 1080, bitrate: 4_300_000, codec: "H.264", container: "mp4", sizeBytes: 81_000_000, label: "1080p"),
-                MediaVariant(delivery: .file(video), width: 1280, height: 720, bitrate: 1_100_000, codec: "H.264", container: "mp4", sizeBytes: 26_000_000, label: "720p")
-            ], thumbnailURL: photo, duration: 213),
-            MediaItem(index: 1, kind: .photo, variants: [MediaVariant(delivery: .file(photo), width: 1280, height: 720, codec: "JPEG", container: "jpg", sizeBytes: 140_000, label: "cover")], thumbnailURL: second)
-        ]
-        let post = Post(platform: .youTube, sourceURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!, canonicalURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!, author: Author(name: "Rick Astley", handle: nil), title: "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)", text: "The official video for “Never Gonna Give You Up” by Rick Astley.", createdAt: Date(timeIntervalSince1970: 1_256_428_800), items: items, notes: [], extractor: "fixture")
-        model.linkInput = post.sourceURL.absoluteString
-        model.catchState = .ready(post)
-        model.jobs = [
-            SaveJob(request: SaveRequest(post: post, selectedItemIDs: Set(items.map(\.id)), quality: .best, saveToPhotos: false), stage: .downloading, progress: 0.42, bytesReceived: 34_000_000, bytesExpected: 81_140_000, bytesPerSecond: 2_400_000, currentItem: 0),
-            SaveJob(request: SaveRequest(post: post, selectedItemIDs: Set(items.map(\.id)), quality: .best, saveToPhotos: false), stage: .done, progress: 1, bytesReceived: 81_140_000, bytesExpected: 81_140_000, savedCount: 2, archiveID: model.library.first?.id)
-        ]
+        if let done = model.jobs.firstIndex(where: { $0.stage == .done }) {
+            model.jobs[done].archiveID = model.library.first?.id
+        }
     }
 }
 #endif

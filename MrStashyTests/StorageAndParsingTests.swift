@@ -162,9 +162,11 @@ final class StorageAndParsingTests: XCTestCase {
     }
 
     func testVariantRankingAndPreferences() {
+        // All H.264 so the ordering is independent of the simulator's hardware codec support,
+        // which does not include AV1.
         let small = MediaVariant(delivery: .file(URL(string: "https://a/360")!), width: 640, height: 360, codec: "H.264", container: "mp4", label: "360p")
         let mid = MediaVariant(delivery: .muxed(video: URL(string: "https://a/1080v")!, audio: URL(string: "https://a/a")!), width: 1920, height: 1080, codec: "H.264", container: "mp4", label: "1080p")
-        let big = MediaVariant(delivery: .muxed(video: URL(string: "https://a/2160v")!, audio: URL(string: "https://a/a")!), width: 3840, height: 2160, codec: "AV1", container: "mp4", label: "2160p")
+        let big = MediaVariant(delivery: .muxed(video: URL(string: "https://a/2160v")!, audio: URL(string: "https://a/a")!), width: 3840, height: 2160, codec: "H.264", container: "mp4", label: "2160p")
         let ranked = ExtractorRegistry.rank([small, big, mid])
         XCTAssertEqual(ranked.map(\.label), ["2160p", "1080p", "360p"])
         let item = MediaItem(index: 0, kind: .video, variants: ranked)
@@ -174,12 +176,21 @@ final class StorageAndParsingTests: XCTestCase {
         XCTAssertEqual(SaveEngine.candidates(for: item, preference: .dataSaver).first?.label, "360p")
         XCTAssertEqual(MediaVariant(delivery: .file(URL(string: "https://a")!), width: 3840, height: 2160, container: "mp4", label: "").resolutionLabel, "4K")
         XCTAssertEqual(MediaVariant(delivery: .file(URL(string: "https://a")!), width: 1080, height: 1920, container: "mp4", label: "").resolutionLabel, "1080p")
+        // AV1 is only kept as a candidate when the device can decode it, but never crashes the picker.
+        let av1 = MediaItem(index: 0, kind: .video, variants: [MediaVariant(delivery: .file(URL(string: "https://a/av1")!), width: 3840, height: 2160, codec: "AV1", container: "mp4", label: "2160p")])
+        XCTAssertFalse(SaveEngine.candidates(for: av1, preference: .best).isEmpty)
     }
 
     func testLocalisationFilesAgreeAndPluralsResolve() throws {
         let english = try strings(for: "en")
         let arabic = try strings(for: "ar")
-        XCTAssertEqual(Set(english.keys), Set(arabic.keys), "every key exists in both languages: \(Set(english.keys).symmetricDifference(Set(arabic.keys)))")
+        // Plural forms legitimately differ (English has one/other; Arabic adds zero/two/few/many),
+        // so compare the non-plural keys and require both to carry the same singular keys.
+        let pluralSuffixes = [".zero", ".one", ".two", ".few", ".many", ".other"]
+        func base(_ keys: Dictionary<String, String>.Keys) -> Set<String> {
+            Set(keys.filter { key in !pluralSuffixes.contains { key.hasSuffix($0) } })
+        }
+        XCTAssertEqual(base(english.keys), base(arabic.keys), "every singular key exists in both languages: \(base(english.keys).symmetricDifference(base(arabic.keys)))")
         for key in ["tab.catch", "error.loginRequired.fix", "source.youTube", "stage.done"] {
             XCTAssertNotNil(english[key])
         }

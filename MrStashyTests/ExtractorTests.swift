@@ -200,7 +200,7 @@ final class ExtractorTests: XCTestCase {
 
     func testInstagramGraphQLCarousel() async throws {
         let graphql = """
-        {"data":{"xdt_shortcode_media":{"__typename":"XDTGraphSidecar","shortcode":"CyX","is_video":false,"taken_at_timestamp":1700000000,
+        {"data":{"xdt_shortcode_media":{"__typename":"XDTGraphSidecar","shortcode":"CyXaQ8Ir4sh","is_video":false,"taken_at_timestamp":1700000000,
           "owner":{"username":"nasa","full_name":"NASA","profile_pic_url":"https://cdn.example/p.jpg","is_verified":true},
           "edge_media_to_caption":{"edges":[{"node":{"text":"Hello space"}}]},
           "edge_sidecar_to_children":{"edges":[
@@ -208,7 +208,7 @@ final class ExtractorTests: XCTestCase {
             {"node":{"is_video":false,"display_url":"https://cdn.example/i.jpg","dimensions":{"width":1080,"height":1350},"display_resources":[{"src":"https://cdn.example/i640.jpg","config_width":640,"config_height":800},{"src":"https://cdn.example/i1080.jpg","config_width":1080,"config_height":1350}]}}]}}}}
         """
         let registry = ExtractorRegistry.stubbed([StubTransport.json("instagram.com/graphql/query", graphql)])
-        let post = try await registry.extract("https://www.instagram.com/p/CyX/")
+        let post = try await registry.extract("https://www.instagram.com/p/CyXaQ8Ir4sh/")
         XCTAssertEqual(post.author.handle, "nasa")
         XCTAssertEqual(post.text, "Hello space")
         XCTAssertEqual(post.items.map(\.kind), [.video, .photo])
@@ -222,7 +222,7 @@ final class ExtractorTests: XCTestCase {
             StubTransport.html("instagram.com/p/", "<html><head><meta property=\"og:image\" content=\"https://static.cdninstagram.com/rsrc.php/static/logo.png\"></head></html>")
         ])
         do {
-            _ = try await registry.extract("https://www.instagram.com/p/CyX/")
+            _ = try await registry.extract("https://www.instagram.com/p/CyXaQ8Ir4sh/")
             XCTFail()
         } catch {
             XCTAssertEqual(error as? StashyError, .loginRequired)

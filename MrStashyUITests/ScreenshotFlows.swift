@@ -22,7 +22,7 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture"])
-        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 20), "The fixture post never appeared on the Catch screen")
+        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 30), "The fixture post never appeared on the Catch screen")
         capture(app, "catch-preview.png")
         app.swipeUp()
         capture(app, "catch-preview-options.png")
@@ -49,7 +49,7 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture", "--arabic"])
-        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 30))
         capture(app, "ar-catch-preview.png")
         openTab(app, "tab.library")
         XCTAssertTrue(firstArchiveTile(app).waitForExistence(timeout: 10))

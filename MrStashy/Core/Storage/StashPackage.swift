@@ -51,6 +51,6 @@ enum StashPackage {
 
     static func isSafe(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\\") else { return false }
-        return !path.split(separator: "/").contains { $0 == ".." || $0.isEmpty }
+        return !path.split(separator: "/", omittingEmptySubsequences: false).contains { $0 == ".." || $0.isEmpty }
     }
 }
