@@ -32,18 +32,24 @@ final class StorageAndParsingTests: XCTestCase {
         let summary = try await store.commit(manifest: manifest, files: [(source, "01-photo.jpg")])
         XCTAssertEqual(summary.fileCount, 1)
         XCTAssertEqual(summary.coverFilename, "01-photo.jpg")
-        XCTAssertEqual(await store.summaries().count, 1)
-        XCTAssertEqual(await store.summaries(matching: "hello").count, 1)
-        XCTAssertEqual(await store.summaries(matching: "ada").count, 1)
-        XCTAssertEqual(await store.summaries(matching: "nothing").count, 0)
+        var count = await store.summaries().count
+        XCTAssertEqual(count, 1)
+        count = await store.summaries(matching: "hello").count
+        XCTAssertEqual(count, 1)
+        count = await store.summaries(matching: "ada").count
+        XCTAssertEqual(count, 1)
+        count = await store.summaries(matching: "nothing").count
+        XCTAssertEqual(count, 0)
 
         let package = try await store.export(manifest.id)
         XCTAssertTrue(FileManager.default.fileExists(atPath: package.path))
         try await store.delete(manifest.id)
-        XCTAssertEqual(await store.summaries().count, 0)
+        count = await store.summaries().count
+        XCTAssertEqual(count, 0)
         let imported = try await store.importPackage(at: package)
         XCTAssertEqual(imported.id, manifest.id)
-        XCTAssertEqual(await store.summaries().count, 1)
+        count = await store.summaries().count
+        XCTAssertEqual(count, 1)
         let reread = try await store.manifest(for: manifest.id)
         XCTAssertEqual(reread.files.first?.sha256, digest)
     }
@@ -80,8 +86,10 @@ final class StorageAndParsingTests: XCTestCase {
         await store.togglePin(id)
         await store.toggleMembership(archive: id, collection: collection.id)
         let reopened = try ArchiveStore(root: root)
-        XCTAssertTrue(await reopened.isPinned(id))
-        XCTAssertEqual(await reopened.collections.map(\.name), ["Trips"])
+        let pinned = await reopened.isPinned(id)
+        XCTAssertTrue(pinned)
+        let names = await reopened.collections.map(\.name)
+        XCTAssertEqual(names, ["Trips"])
     }
 
     func testFileVerifierRejectsHTMLDisguisedAsMedia() throws {
