@@ -49,7 +49,12 @@ final class AppModel {
     private var extractionTask: Task<Void, Never>?
 
     init(storeRoot: URL? = nil, registry: ExtractorRegistry = ExtractorRegistry()) {
-        let settings = Settings.load()
+        var settings = Settings.load()
+        #if DEBUG
+        // Suppress the onboarding sheet synchronously so it never covers the screen a UI test
+        // is waiting on before the async fixture setup has run.
+        if UITestFixtures.suppressesOnboarding { settings.onboardingDone = true }
+        #endif
         self.settings = settings
         L10n.setLanguage(settings.language)
         // A store that cannot be created leaves nothing to do; surfacing that is the job of
