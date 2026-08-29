@@ -22,7 +22,10 @@ final class ScreenshotFlows: XCTestCase {
         app.terminate()
 
         app = launch(["--ui-fixture"])
-        XCTAssertTrue(app.buttons["catch.saveButton"].waitForExistence(timeout: 30), "The fixture post never appeared on the Catch screen")
+        // Capture whatever the fixture launch renders, before asserting, so a failure is visible.
+        _ = app.buttons["catch.saveButton"].waitForExistence(timeout: 30)
+        capture(app, "diag-fixture-launch.png")
+        XCTAssertTrue(app.buttons["catch.saveButton"].exists, "The fixture post never appeared on the Catch screen")
         capture(app, "catch-preview.png")
         app.swipeUp()
         capture(app, "catch-preview-options.png")
