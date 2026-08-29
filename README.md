@@ -1,5 +1,3 @@
-<div align="center">
-
 **Catch it. Keep it.** Stashy is an iPhone app that takes a public post link and stores the
 post on the phone: its text, author, every picture at full size, and the video at the highest
 quality the source actually serves. No account, no server, no analytics. Arabic and English.
